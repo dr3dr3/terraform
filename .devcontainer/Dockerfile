@@ -25,6 +25,9 @@ RUN apk add --no-cache aws-cli
 # Install Docker CLI (for Docker-outside-of-Docker)
 RUN apk add --no-cache docker-cli docker-cli-compose
 
+# BASH is needed for setting up docker-outside-of-docker as per devcontainer.json
+RUN apk add --no-cache bash
+
 # Install LocalStack CLI (requires build dependencies for psutil)
 #RUN apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
 #    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
