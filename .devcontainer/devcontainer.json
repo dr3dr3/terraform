@@ -7,6 +7,25 @@
 
     "workspaceFolder": "/workspace",
 
+    // Mount Docker socket to enable Docker/LocalStack from within container
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+
+    // Ensure the container runs with necessary permissions
+    "runArgs": [
+        "--network=host",
+        "--privileged"
+    ],
+    
+    // Add Docker socket as a feature for better DevPod compatibility
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "version": "latest",
+            "moby": false
+        }
+    },
+
     "postCreateCommand": "gum style --foreground 003 --border-foreground 003 --border rounded --align center --width 50 --margin '1 2' --padding '2 4' 'André Dreyer' 'Terraform'",
 
     "customizations": {
@@ -17,7 +36,9 @@
                 "github.vscode-pull-request-github",
                 "ms-azuretools.vscode-docker",
                 "github.copilot",
-                "Anthropic.claude-code"
+                "Anthropic.claude-code",
+                "hashicorp.terraform",
+                "hashicorp.hcl"
             ],
             "settings": {
                 "editor.fontFamily": "FiraCode Nerd Font, monospace",
