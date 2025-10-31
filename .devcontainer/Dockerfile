@@ -26,9 +26,9 @@ RUN apk add --no-cache aws-cli
 RUN apk add --no-cache docker-cli docker-cli-compose
 
 # Install LocalStack CLI (requires build dependencies for psutil)
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
-    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
-    apk del .build-deps
+#RUN apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
+#    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
+#    apk del .build-deps
 
 RUN npm install -g @anthropic-ai/claude-code
 
