@@ -25,14 +25,18 @@ RUN apk add --no-cache aws-cli
 # Install Docker CLI (for Docker-outside-of-Docker)
 RUN apk add --no-cache docker-cli docker-cli-compose
 
-# BASH is needed for setting up docker-outside-of-docker as per devcontainer.json
-RUN apk add --no-cache bash
-
 # Install LocalStack CLI (requires build dependencies for psutil)
-#RUN apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
-#    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
-#    apk del .build-deps
+RUN apk add --no-cache py3-pip && \
+    apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
+    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
+    apk del .build-deps
 
+# Install 1Password CLI
+RUN echo https://downloads.1password.com/linux/alpinelinux/stable/ >> /etc/apk/repositories && \
+    wget https://downloads.1password.com/linux/keys/alpinelinux/support@1password.com-61ddfc31.rsa.pub -P /etc/apk/keys && \
+    apk update && apk add 1password-cli
+
+# Install AI Assistants CLIs
 RUN npm install -g @anthropic-ai/claude-code
 
 ENV SHELL=/usr/bin/fish

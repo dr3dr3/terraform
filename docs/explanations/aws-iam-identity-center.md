@@ -1,4 +1,4 @@
-Good question! IAM Identity Center is actually really straightforward for a single-user setup. Let me walk you through it.
+# AWS IAM Identify Center
 
 ## What IAM Identity Center Does
 
