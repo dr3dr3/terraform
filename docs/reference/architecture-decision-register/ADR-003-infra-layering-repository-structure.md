@@ -1,7 +1,8 @@
 # Architecture Decision Record: Infrastructure Layering and Repository Structure
 
 ## Status
-Proposed
+
+Approved
 
 ## Context
 
@@ -48,12 +49,14 @@ As our infrastructure grows, we need to make strategic decisions about how to or
 5. **Deployment Coupling**: When does app deployment trigger infrastructure changes?
 
 ### Current Situation
+
 - Using Terraform Cloud for state management (ADR-001)
 - VCS-driven workflow with mono-branch + directories (ADR-002)
 - Microservices architecture (current: 3 services, growing to 10+)
 - Separate AWS accounts for Dev, Staging, Production
 
 ### Requirements
+
 - Clear separation of concerns by change frequency
 - Enable independent deployment of applications
 - Support infrastructure changes without application redeployment
@@ -77,11 +80,13 @@ As our infrastructure grows, we need to make strategic decisions about how to or
 
 ### Option 1: Infrastructure Monorepo with Layered Structure
 
-#### Overview
+#### Overview - Option 1
+
 Single repository for all infrastructure code, organized into layers by change frequency and concern.
 
-#### Repository Structure
-```
+#### Repository Structure - Option 1
+
+```bash
 terraform-infrastructure/  (Infrastructure monorepo)
 ├── .github/
 │   ├── CODEOWNERS
@@ -90,7 +95,7 @@ terraform-infrastructure/  (Infrastructure monorepo)
 │   ├── vpc/
 │   ├── eks-cluster/
 │   ├── rds-postgres/
-│   ├── application-service/         # Module for app infrastructure
+│   ├── application-service/         # Module for app infrastructure on EKS
 │   └── load-balancer/
 ├── layers/
 │   ├── 01-foundation/               # Rarely changes
@@ -130,15 +135,13 @@ service-a/  (Application monorepo - separate from infra)
 ├── src/
 ├── tests/
 ├── Dockerfile
-├── k8s/                             # K8s manifests for deployments only
-│   ├── deployment.yaml              # References existing EKS from infra
-│   └── service.yaml
 └── .github/workflows/
-    └── deploy.yaml                  # Deploys code, not infrastructure
+    └── deploy.yaml                  # Builds image, updates k8s-manifests repo
 ```
 
-#### Terraform Cloud Workspaces
-```
+#### Terraform Cloud Workspaces - Option 1
+
+```bash
 # Foundation Layer (3 workspaces)
 aws-foundation-dev         -> layers/01-foundation/environments/dev
 aws-foundation-staging     -> layers/01-foundation/environments/staging
@@ -159,7 +162,8 @@ aws-service-a-staging      -> layers/04-applications/service-a/environments/stag
 aws-service-a-production   -> layers/04-applications/service-a/environments/production
 ```
 
-#### Cross-Layer Data Sharing
+#### Cross-Layer Data Sharing - Option 1
+
 ```hcl
 # In service-a/environments/dev/main.tf
 data "terraform_remote_state" "foundation" {
@@ -182,21 +186,39 @@ data "terraform_remote_state" "shared_services" {
   }
 }
 
-resource "aws_ecs_service" "app" {
-  # Use VPC from foundation layer
-  network_configuration {
-    subnets = data.terraform_remote_state.foundation.outputs.private_subnet_ids
-    security_groups = [aws_security_group.app.id]
+resource "kubernetes_deployment" "app" {
+  metadata {
+    name = "app"
+    namespace = "default"
   }
   
-  # Use load balancer from shared services
-  load_balancer {
-    target_group_arn = data.terraform_remote_state.shared_services.outputs.alb_target_group_arn
+  spec {
+    selector {
+      match_labels = {
+        app = "app"
+      }
+    }
+    
+    template {
+      metadata {
+        labels = {
+          app = "app"
+        }
+      }
+      
+      spec {
+        container {
+          name  = "app"
+          image = "app:latest"
+        }
+      }
+    }
   }
 }
 ```
 
-#### Pros
+#### Pros - Option 1
+
 - **Clear layering**: Infrastructure organized by change frequency
 - **Reduced blast radius**: Changes to foundation don't affect applications
 - **Parallel work**: Different teams can work on different layers simultaneously
@@ -206,7 +228,8 @@ resource "aws_ecs_service" "app" {
 - **Simplified CODEOWNERS**: Clear ownership per directory
 - **Better visibility**: See all infrastructure in one place
 
-#### Cons
+#### Cons - Option 1
+
 - **More complex structure**: Requires discipline to maintain
 - **Cross-layer dependencies**: Must use terraform_remote_state
 - **Larger repository**: Single repo grows with all infrastructure
@@ -217,11 +240,13 @@ resource "aws_ecs_service" "app" {
 
 ### Option 2: Multi-Repository Approach (Repo per Layer/Service)
 
-#### Overview
+#### Overview - Option 2
+
 Separate Git repositories for each infrastructure layer and application.
 
-#### Repository Structure
-```
+#### Repository Structure - Option 2
+
+```bash
 # Infrastructure Repositories
 terraform-foundation/
 ├── environments/
@@ -258,7 +283,8 @@ service-b/
 └── k8s/
 ```
 
-#### Pros
+#### Pros - Option 2
+
 - **Maximum isolation**: Complete separation between components
 - **Granular access control**: Different repos = different permissions
 - **Independent versioning**: Each repo has its own release cycle
@@ -266,7 +292,8 @@ service-b/
 - **Clear boundaries**: Physical separation enforces good practices
 - **Team autonomy**: Teams own their entire repository
 
-#### Cons
+#### Cons - Option 2
+
 - **Many repositories**: 10+ repos for 10 services
 - **Complex dependency management**: Cross-repo dependencies harder to track
 - **Module versioning overhead**: Must version modules in separate repos
@@ -278,11 +305,13 @@ service-b/
 
 ### Option 3: Application Code + Infrastructure Co-located
 
-#### Overview
+#### Overview - Option 3
+
 Each application repository contains both application code AND its infrastructure code.
 
-#### Repository Structure
-```
+#### Repository Structure - Option 3
+
+```bash
 service-a/
 ├── src/                    # Application code
 │   ├── api/
@@ -300,14 +329,16 @@ service-a/
     └── terraform-apply.yaml     # For infrastructure
 ```
 
-#### Pros
+#### Pros - Option 3
+
 - **Co-location**: Everything for one service in one place
 - **Single version**: App and infra versioned together
 - **Team ownership**: Team owns entire service stack
 - **Simplified onboarding**: One repo to understand
 - **Easier to see dependencies**: App dependencies = infra dependencies
 
-#### Cons
+#### Cons - Option 3
+
 - **Tight coupling**: Hard to change infrastructure without app context
 - **No shared infrastructure**: Foundation layer must be separate anyway
 - **Deployment complexity**: Must separate app deploys from infra changes
@@ -318,21 +349,43 @@ service-a/
 
 ### Option 4: Hybrid Approach - Infra Monorepo + App Repos
 
-#### Overview
+#### Overview - Option 4
+
 Infrastructure monorepo (Option 1) + separate application code repositories.
 
-#### Structure
-```
+#### Structure - Option 4
+
+```bash
 # Infrastructure Monorepo
-terraform-infrastructure/
-├── layers/
-│   ├── 01-foundation/
-│   ├── 02-platform/
-│   ├── 03-shared-services/
-│   └── 04-applications/
-│       ├── service-a/      # Just the ECS task definition, scaling
+terraform/
+├── env-management/
+│   └── foundation-layer/
+│       ├── iam-roles-for-people/
+│       └── iam-roles-for-terraform/
+├── env-development/
+│   ├── foundation-layer/
+│   │   └── iam-roles-terraform/
+│   ├── platform-layer/
+│   ├── shared-services-layer/
+│   └── applications-layer/
+│       ├── eks-learning-cluster/
+│       ├── service-a/      # Terraform config for namespace, RBAC, HPA
 │       └── service-b/
-└── modules/
+├── env-staging/
+│   ├── foundation-layer/
+│   ├── platform-layer/
+│   ├── shared-services-layer/
+│   └── applications-layer/
+├── env-production/
+│   ├── foundation-layer/
+│   ├── platform-layer/
+│   ├── shared-services-layer/
+│   └── applications-layer/
+└── env-local/
+    ├── foundation-layer/
+    ├── platform-layer/
+    ├── sandbox-layer/
+    └── applications-layer/
 
 # Separate App Repos (Code only)
 service-a/
@@ -340,29 +393,51 @@ service-a/
 ├── tests/
 ├── Dockerfile
 └── .github/workflows/
-    └── deploy.yaml         # Deploys Docker image, updates ECS task
+    └── deploy.yaml         # Builds image, updates k8s-manifests repo
+
+# K8s Manifests Repo (GitOps)
+k8s-manifests/
+├── apps/
+│   ├── service-a/
+│   │   ├── base/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   └── kustomization.yaml
+│   │   └── overlays/
+│   │       ├── development/
+│   │       ├── staging/
+│   │       └── production/
+│   └── service-b/
+└── argocd/
+    └── applications/
+        ├── service-a.yaml
+        └── service-b.yaml
 
 service-b/
 ├── src/
 └── ...
 ```
 
-#### Workflow
-1. **Infrastructure changes**: Update terraform-infrastructure repo
-2. **Application deployment**: 
-   - App repo builds Docker image
-   - App CI/CD updates ECS task definition to use new image
-   - No Terraform needed for code deployment
-3. **Scaling**: Can be done in terraform-infrastructure OR via AWS API
+#### Workflow - Option 4
 
-#### Pros
+1. **Infrastructure changes**: Update terraform repo (e.g., `env-development/applications-layer/service-a/`)
+2. **Application deployment**:
+   - App repo builds Docker image and pushes to registry
+   - App CI/CD updates image tag in k8s-manifests repo
+   - ArgoCD detects change and syncs to EKS cluster
+   - No Terraform needed for code deployment
+3. **Scaling**: Can be done in terraform repo (HPA config) OR via kubectl
+
+#### Pros - Option 4
+
 - **Best separation of concerns**: Infrastructure and application cleanly separated
 - **Independent deployment cycles**: Apps deploy without touching infra repo
 - **Platform team control**: Infrastructure managed centrally
 - **Application team focus**: Apps only care about their code
-- **Flexible deployment**: Can update app without Terraform
+- **Flexible deployment**: Can update app via kubectl/helm without Terraform
 
-#### Cons
+#### Cons - Option 4
+
 - **Two repos per service**: More repos to manage
 - **Requires coordination**: Infra changes need sync with app teams
 - **Scaling split**: Scaling config might be in infrastructure, but triggered by app
@@ -387,7 +462,7 @@ service-b/
 
 ## Decision
 
-**Recommended: Option 4 - Hybrid Approach (Infrastructure Monorepo + Separate Application Repositories)**
+**Recommended:** Option 4 - Hybrid Approach (Infrastructure Monorepo + Separate Application Repositories)
 
 ## Rationale
 
@@ -396,12 +471,14 @@ Given your requirements and team structure, the hybrid approach provides the bes
 ### 1. Clean Separation of Concerns
 
 **Infrastructure** (terraform-infrastructure monorepo):
+
 - Foundation, platform, shared services, application infrastructure
 - Managed by platform team
 - Changes go through careful review process
 - Layered to reduce blast radius
 
 **Application Code** (separate repos):
+
 - Source code, tests, Dockerfile
 - Managed by application teams
 - Deploys frequently without touching infrastructure
@@ -413,7 +490,7 @@ Infrastructure can be decoupled by change frequency. In your case:
 
 - **Daily/Hourly**: Application code deployments (Docker image updates)
   - Handled by application CI/CD
-  - Updates ECS task definition or K8s deployment
+  - Updates K8s deployment manifest
   - No Terraform involved
   
 - **Weekly/Monthly**: Application scaling (task count, instance size)
@@ -471,10 +548,10 @@ resource "aws_ecs_service" "service_a" {
 
 ### 5. Enables Team Autonomy with Platform Control
 
-- **Platform Team**: Owns terraform-infrastructure repo
+- **Platform Team**: Owns terraform repo
   - Defines modules and patterns
   - Provisions shared infrastructure
-  - Creates application infrastructure (ECS clusters, load balancers)
+  - Creates application infrastructure (EKS clusters, ingress controllers)
   
 - **Application Teams**: Own their service repos
   - Deploy code frequently
@@ -485,87 +562,116 @@ resource "aws_ecs_service" "service_a" {
 
 ### Phase 1: Repository Setup (Week 1)
 
-**Step 1: Create Infrastructure Monorepo**
+#### Step 1: Create Infrastructure Monorepo
+
 ```bash
-terraform-infrastructure/
-├── modules/
+terraform/
+├── terraform-modules/              # Reusable modules
 │   ├── vpc/
 │   ├── eks-cluster/
-│   ├── application-ecs-service/     # Reusable app service module
+│   ├── application-deployment/
 │   └── README.md
-├── layers/
-│   ├── 01-foundation/
-│   │   ├── environments/
-│   │   │   ├── dev/
-│   │   │   │   ├── main.tf
-│   │   │   │   ├── variables.tf
-│   │   │   │   ├── outputs.tf      # Export VPC ID, subnets, etc.
-│   │   │   │   └── terraform.tfvars
-│   │   │   ├── staging/
-│   │   │   └── production/
-│   │   └── README.md
-│   ├── 02-platform/                 # CI/CD, monitoring, logging
-│   ├── 03-shared-services/          # Shared databases, caches
-│   └── 04-applications/
+├── env-management/
+│   └── foundation-layer/
+│       ├── iam-roles-for-people/
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   ├── outputs.tf
+│       │   └── terraform.tfvars
+│       └── iam-roles-for-terraform/
+│           ├── main.tf
+│           ├── variables.tf
+│           ├── outputs.tf
+│           └── terraform.tfvars
+├── env-development/
+│   ├── foundation-layer/
+│   │   └── iam-roles-terraform/
+│   │       ├── main.tf
+│   │       ├── variables.tf
+│   │       ├── outputs.tf          # Export VPC ID, subnets, etc.
+│   │       └── terraform.tfvars
+│   ├── platform-layer/              # CI/CD, monitoring, logging, EKS
+│   ├── shared-services-layer/       # Shared databases, caches
+│   └── applications-layer/
+│       ├── eks-learning-cluster/
 │       ├── service-a/
 │       ├── service-b/
 │       └── service-c/
-└── docs/
-    └── architecture/
-        ├── ADR-INDEX.md
-        ├── ADR-001-terraform-state-management.md
-        ├── ADR-002-terraform-workflow-git-cicd.md
-        └── ADR-003-infrastructure-layering-repository-structure.md
+├── env-staging/
+│   ├── foundation-layer/
+│   ├── platform-layer/
+│   ├── shared-services-layer/
+│   └── applications-layer/
+├── env-production/
+│   ├── foundation-layer/
+│   ├── platform-layer/
+│   ├── shared-services-layer/
+│   └── applications-layer/
+└── env-local/
+    ├── foundation-layer/
+    ├── platform-layer/
+    ├── sandbox-layer/
+    └── applications-layer/
 ```
 
-**Step 2: Configure Terraform Cloud Workspaces**
+#### Step 2: Configure Terraform Cloud Workspaces
 
 Create workspaces for each layer × environment:
-```
-# Foundation Layer
-aws-foundation-dev         (working-dir: layers/01-foundation/environments/dev)
-aws-foundation-staging     (working-dir: layers/01-foundation/environments/staging)
-aws-foundation-production  (working-dir: layers/01-foundation/environments/production)
 
-# Platform Layer
-aws-platform-dev
-aws-platform-staging
-aws-platform-production
+```bash
+# Management Environment - Foundation Layer
+aws-management-foundation-iam-people    (working-dir: env-management/foundation-layer/iam-roles-for-people)
+aws-management-foundation-iam-terraform (working-dir: env-management/foundation-layer/iam-roles-for-terraform)
 
-# Shared Services
-aws-shared-services-dev
-aws-shared-services-staging
-aws-shared-services-production
+# Development Environment
+aws-dev-foundation-iam       (working-dir: env-development/foundation-layer/iam-roles-terraform)
+aws-dev-platform             (working-dir: env-development/platform-layer)
+aws-dev-shared-services      (working-dir: env-development/shared-services-layer)
+aws-dev-app-service-a        (working-dir: env-development/applications-layer/service-a)
+aws-dev-app-service-b        (working-dir: env-development/applications-layer/service-b)
 
-# Per Application
-aws-service-a-dev
-aws-service-a-staging
-aws-service-a-production
+# Staging Environment
+aws-staging-foundation-iam   (working-dir: env-staging/foundation-layer/iam-roles-terraform)
+aws-staging-platform         (working-dir: env-staging/platform-layer)
+aws-staging-shared-services  (working-dir: env-staging/shared-services-layer)
+aws-staging-app-service-a    (working-dir: env-staging/applications-layer/service-a)
+
+# Production Environment
+aws-prod-foundation-iam      (working-dir: env-production/foundation-layer/iam-roles-terraform)
+aws-prod-platform            (working-dir: env-production/platform-layer)
+aws-prod-shared-services     (working-dir: env-production/shared-services-layer)
+aws-prod-app-service-a       (working-dir: env-production/applications-layer/service-a)
 ```
 
 ### Phase 2: Layer 01 - Foundation (Week 2)
 
-**Deploy Foundation Infrastructure**
+#### Deploy Foundation Infrastructure
+
 ```hcl
-# layers/01-foundation/environments/dev/main.tf
+### Phase 2: Foundation Layer (Week 2)
+
+#### Deploy Foundation Infrastructure
+
+```hcl
+# env-development/foundation-layer/iam-roles-terraform/main.tf
 terraform {
   required_version = "~> 1.6.0"
   cloud {
     organization = "your-org"
     workspaces {
-      name = "aws-foundation-dev"
+      name = "aws-dev-foundation-iam"
     }
   }
 }
 
 module "vpc" {
-  source = "../../../../modules/vpc"
+  source = "../../../terraform-modules/vpc"
   
-  environment = "dev"
+  environment = "development"
   cidr_block  = "10.0.0.0/16"
 }
 
-# layers/01-foundation/environments/dev/outputs.tf
+# env-development/foundation-layer/iam-roles-terraform/outputs.tf
 output "vpc_id" {
   description = "VPC ID for use by other layers"
   value       = module.vpc.vpc_id
@@ -582,59 +688,61 @@ output "public_subnet_ids" {
 }
 ```
 
-### Phase 3: Layer 02 - Platform (Week 2-3)
+### Phase 3: Platform Layer (Week 2-3)
 
-**Deploy Platform Infrastructure**
+#### Deploy Platform Infrastructure
+
 ```hcl
-# layers/02-platform/environments/dev/main.tf
+# env-development/platform-layer/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-foundation-dev" }
+    workspaces = { name = "aws-dev-foundation-iam" }
   }
 }
 
 module "eks_cluster" {
-  source = "../../../../modules/eks-cluster"
+  source = "../../terraform-modules/eks-cluster"
   
-  environment = "dev"
+  environment = "development"
   vpc_id      = data.terraform_remote_state.foundation.outputs.vpc_id
   subnet_ids  = data.terraform_remote_state.foundation.outputs.private_subnet_ids
 }
 
 module "monitoring" {
-  source = "../../../../modules/monitoring"
+  source = "../../terraform-modules/monitoring"
   
-  environment = "dev"
+  environment = "development"
 }
 ```
 
-### Phase 4: Layer 03 - Shared Services (Week 3)
+### Phase 4: Shared Services Layer (Week 3)
 
-**Deploy Shared Services**
+#### Deploy Shared Services
+
 ```hcl
-# layers/03-shared-services/environments/dev/main.tf
+# env-development/shared-services-layer/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-foundation-dev" }
+    workspaces = { name = "aws-dev-foundation-iam" }
   }
 }
 
 module "shared_postgres" {
-  source = "../../../../modules/rds-postgres"
+  source = "../../terraform-modules/rds-postgres"
   
-  environment = "dev"
+  environment = "development"
   vpc_id      = data.terraform_remote_state.foundation.outputs.vpc_id
   subnet_ids  = data.terraform_remote_state.foundation.outputs.private_subnet_ids
 }
 
 module "shared_redis" {
-  source = "../../../../modules/elasticache-redis"
+  source = "../../terraform-modules/elasticache-redis"
   
-  environment = "dev"
+  environment = "development"
   vpc_id      = data.terraform_remote_state.foundation.outputs.vpc_id
   subnet_ids  = data.terraform_remote_state.foundation.outputs.private_subnet_ids
 }
@@ -649,16 +757,17 @@ output "redis_endpoint" {
 }
 ```
 
-### Phase 5: Layer 04 - Application Infrastructure (Week 4)
+### Phase 5: Applications Layer (Week 4)
 
-**Deploy Application Infrastructure (NOT code)**
+#### Deploy Application Infrastructure (NOT code)
+
 ```hcl
-# layers/04-applications/service-a/environments/dev/main.tf
+# env-development/applications-layer/service-a/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-foundation-dev" }
+    workspaces = { name = "aws-dev-foundation-iam" }
   }
 }
 
@@ -666,7 +775,7 @@ data "terraform_remote_state" "platform" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-platform-dev" }
+    workspaces = { name = "aws-dev-platform" }
   }
 }
 
@@ -674,27 +783,29 @@ data "terraform_remote_state" "shared_services" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-shared-services-dev" }
+    workspaces = { name = "aws-dev-shared-services" }
   }
 }
 
 module "application" {
-  source = "../../../../modules/application-ecs-service"
+  source = "../../../terraform-modules/application-deployment"
   
   service_name = "service-a"
-  environment  = "dev"
+  environment  = "development"
   
   # Infrastructure from other layers
   vpc_id             = data.terraform_remote_state.foundation.outputs.vpc_id
   private_subnet_ids = data.terraform_remote_state.foundation.outputs.private_subnet_ids
-  ecs_cluster_id     = data.terraform_remote_state.platform.outputs.ecs_cluster_id
+  eks_cluster_name   = data.terraform_remote_state.platform.outputs.eks_cluster_name
   
   # Application-specific settings
   container_image    = "service-a:latest"  # Initial placeholder
   container_port     = 8080
-  desired_count      = 2
-  cpu                = "256"
-  memory             = "512"
+  replicas           = 2
+  cpu_request        = "250m"
+  memory_request     = "512Mi"
+  cpu_limit          = "500m"
+  memory_limit       = "1Gi"
   
   # Environment variables (references to shared services)
   environment_variables = {
@@ -716,8 +827,9 @@ output "service_url" {
 
 ### Phase 6: Application Code Repository Setup (Week 4)
 
-**Create Application Repository (Separate from Infrastructure)**
-```
+#### Create Application Repository (Separate from Infrastructure)
+
+```bash
 service-a/
 ├── src/
 │   ├── main.py
@@ -726,11 +838,33 @@ service-a/
 ├── Dockerfile
 ├── .github/
 │   └── workflows/
-│       └── deploy.yaml         # Deploys code, NOT infrastructure
+│       └── deploy.yaml         # Builds image, updates k8s-manifests repo
 └── README.md
+
+# Separate K8s Manifests Repository (GitOps)
+k8s-manifests/
+├── apps/
+│   ├── service-a/
+│   │   ├── base/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   └── kustomization.yaml
+│   │   └── overlays/
+│   │       ├── development/
+│   │       │   └── kustomization.yaml
+│   │       ├── staging/
+│   │       │   └── kustomization.yaml
+│   │       └── production/
+│   │           └── kustomization.yaml
+│   └── service-b/
+└── argocd/
+    └── applications/
+        ├── service-a.yaml
+        └── service-b.yaml
 ```
 
-**Application CI/CD Pipeline (GitHub Actions)**
+#### Application CI/CD Pipeline (GitHub Actions)
+
 ```yaml
 # service-a/.github/workflows/deploy.yaml
 name: Deploy Application
@@ -745,23 +879,22 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Build Docker image
+      - name: Build and push Docker image
         run: |
           docker build -t service-a:${{ github.sha }} .
-          
-      - name: Push to ECR
-        run: |
-          aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
-          docker tag service-a:${{ github.sha }} $ECR_REGISTRY/service-a:${{ github.sha }}
           docker push $ECR_REGISTRY/service-a:${{ github.sha }}
-          
-      - name: Update ECS task definition
+      
+      - name: Update k8s-manifests repo
         run: |
-          aws ecs update-service \
-            --cluster production-cluster \
-            --service service-a \
-            --force-new-deployment \
-            --task-definition service-a:latest
+          git clone https://github.com/org/k8s-manifests.git
+          cd k8s-manifests
+          cd apps/service-a/overlays/production
+          kustomize edit set image service-a=$ECR_REGISTRY/service-a:${{ github.sha }}
+          git add .
+          git commit -m "Update service-a image to ${{ github.sha }}"
+          git push
+      
+      # ArgoCD automatically detects the change and syncs to cluster
 ```
 
 ## Managing Different Infrastructure Change Types
@@ -769,31 +902,34 @@ jobs:
 ### Type 1: Application Code Deployment (Daily/Hourly)
 
 **What Changes**: Docker image version
-**Where**: Application repository (service-a)
-**How**: Application CI/CD updates ECS task
+**Where**: Application repository (service-a) + k8s-manifests repo
+**How**: Application CI/CD updates k8s-manifests, ArgoCD syncs to cluster
 **Terraform Involved**: No
 
 ```bash
 # Developer workflow
 git commit -m "feat: new feature"
 git push
-# GitHub Actions builds image, pushes to ECR, updates ECS
-# Zero interaction with terraform-infrastructure repo
+# GitHub Actions builds image, pushes to ECR, updates k8s-manifests repo
+# ArgoCD detects change and deploys to EKS cluster
+# Zero interaction with terraform repo
 ```
 
 ### Type 2: Application Scaling (Weekly/As Needed)
 
-**What Changes**: Desired count, CPU, memory
-**Where**: terraform-infrastructure repo
+**What Changes**: Replica count, CPU, memory
+**Where**: terraform repo (env-development/applications-layer/service-a/)
 **How**: Update variables, apply Terraform
 
-**Option A: Manual Scaling via Terraform**
+#### Option A: Manual Scaling via Terraform
+
 ```hcl
-# layers/04-applications/service-a/environments/dev/terraform.tfvars
-desired_count = 5  # Scale from 2 to 5
-cpu           = "512"  # Increase CPU
-memory        = "1024"  # Increase memory
+# env-development/applications-layer/service-a/terraform.tfvars
+replicas      = 5  # Scale from 2 to 5
+cpu_request   = "500m"  # Increase CPU
+memory_request = "1Gi"  # Increase memory
 ```
+
 ```bash
 # Changes applied via Terraform Cloud VCS-driven workflow
 git commit -m "scale: increase service-a to 5 tasks"
@@ -801,28 +937,46 @@ git push
 # Terraform Cloud auto-applies (dev), manual approval (prod)
 ```
 
-**Option B: Auto-Scaling (Preferred)**
+#### Option B: Auto-Scaling (Preferred)
+
 ```hcl
-# Set up in terraform-infrastructure
-resource "aws_appautoscaling_target" "ecs_target" {
-  max_capacity       = 10
-  min_capacity       = 2
-  resource_id        = "service/${var.ecs_cluster_name}/${var.service_name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
+# Set up Horizontal Pod Autoscaler in Terraform
+resource "kubernetes_horizontal_pod_autoscaler_v2" "app_hpa" {
+  metadata {
+    name      = "service-a-hpa"
+    namespace = "default"
+  }
 
-resource "aws_appautoscaling_policy" "ecs_policy_cpu" {
-  name               = "cpu-autoscaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
+  spec {
+    min_replicas = 2
+    max_replicas = 10
 
-  target_tracking_scaling_policy_configuration {
-    target_value       = 75.0
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "service-a"
+    }
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 75
+        }
+      }
+    }
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "memory"
+        target {
+          type                = "Utilization"
+          average_utilization = 80
+        }
+      }
     }
   }
 }
@@ -830,13 +984,13 @@ resource "aws_appautoscaling_policy" "ecs_policy_cpu" {
 # Now scaling happens automatically, no manual intervention
 ```
 
-**Option C: Emergency Manual Scaling (No Terraform)**
+#### Option C: Emergency Manual Scaling (No Terraform)
+
 ```bash
 # For immediate response, bypass Terraform
-aws ecs update-service \
-  --cluster production-cluster \
-  --service service-a \
-  --desired-count 10
+kubectl scale deployment service-a \
+  --replicas=10 \
+  -n production
 
 # Then update Terraform to match reality
 # (or let Terraform drift detection alert you)
@@ -845,12 +999,12 @@ aws ecs update-service \
 ### Type 3: New Infrastructure Components (Monthly)
 
 **What Changes**: New service, new database, networking changes
-**Where**: terraform-infrastructure repo
+**Where**: terraform repo
 **How**: Add new module calls, apply Terraform
 
 ```bash
-# In terraform-infrastructure repo
-cd layers/04-applications
+# In terraform repo
+cd env-development/applications-layer
 mkdir service-d
 # Set up new service infrastructure
 git commit -m "feat: add service-d infrastructure"
@@ -861,11 +1015,11 @@ git push
 ### Type 4: Shared Infrastructure Updates (Quarterly)
 
 **What Changes**: VPC, subnet expansion, new region
-**Where**: layers/01-foundation
+**Where**: env-development/foundation-layer/
 **How**: Careful planning, testing in dev first
 
 ```bash
-cd layers/01-foundation/environments/dev
+cd env-development/foundation-layer/iam-roles-terraform
 # Update foundation code
 terraform plan  # Review carefully
 git commit -m "feat: add new subnet for expansion"
@@ -877,37 +1031,38 @@ git commit -m "feat: add new subnet for expansion"
 ### Scenario: Service A Depends on Service B
 
 ```hcl
-# layers/04-applications/service-a/environments/dev/main.tf
+# env-development/applications-layer/service-a/main.tf
 
 # Get Service B's outputs
 data "terraform_remote_state" "service_b" {
   backend = "remote"
   config = {
     organization = "your-org"
-    workspaces = { name = "aws-service-b-dev" }
+    workspaces = { name = "aws-dev-app-service-b" }
   }
 }
 
 module "application" {
-  source = "../../../../modules/application-ecs-service"
+  source = "../../../terraform-modules/application-deployment"
   
   service_name = "service-a"
-  environment  = "dev"
+  environment  = "development"
   
   # Service A can call Service B
   environment_variables = {
-    SERVICE_B_URL = data.terraform_remote_state.service_b.outputs.service_url
-    SERVICE_B_DISCOVERY_ARN = data.terraform_remote_state.service_b.outputs.service_discovery_arn
+    SERVICE_B_URL = "http://service-b.default.svc.cluster.local:8080"
+    SERVICE_B_HOST = data.terraform_remote_state.service_b.outputs.service_hostname
   }
 }
 ```
 
 ## Layer Dependency Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 01: Foundation (VPC, Networking, IAM)                     │
-│ State: aws-foundation-{env}                                     │
+│ Foundation Layer (VPC, Networking, IAM)                         │
+│ Path: env-{environment}/foundation-layer/                       │
+│ State: aws-{env}-foundation-iam                                 │
 │ Changes: Rarely (quarterly)                                     │
 │ Outputs: vpc_id, subnet_ids, security_group_ids                │
 └─────────────────────────────────────────────────────────────────┘
@@ -915,9 +1070,11 @@ module "application" {
                     ┌───────────┴───────────┐
                     ▼                       ▼
 ┌──────────────────────────────┐ ┌──────────────────────────────┐
-│ Layer 02: Platform           │ │ Layer 03: Shared Services    │
+│ Platform Layer               │ │ Shared Services Layer        │
 │ (EKS, CI/CD, Monitoring)     │ │ (Databases, Caches, Queues)  │
-│ State: aws-platform-{env}    │ │ State: aws-shared-svc-{env}  │
+│ Path: env-{env}/platform-    │ │ Path: env-{env}/shared-      │
+│       layer/                 │ │       services-layer/        │
+│ State: aws-{env}-platform    │ │ State: aws-{env}-shared-svc  │
 │ Changes: Monthly             │ │ Changes: Monthly             │
 │ Depends on: Foundation       │ │ Depends on: Foundation       │
 └──────────────────────────────┘ └──────────────────────────────┘
@@ -925,89 +1082,151 @@ module "application" {
                     └───────────┬───────────┘
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ Layer 04: Applications (Service A, B, C, ...)                   │
-│ States: aws-service-a-{env}, aws-service-b-{env}, ...          │
-│ Changes: Weekly (for scaling/config)                           │
-│ Depends on: Foundation, Platform, Shared Services, Other Apps  │
+│ Applications Layer (Service A, B, C, ...)                       │
+│ Path: env-{environment}/applications-layer/{service-name}/      │
+│ States: aws-{env}-app-service-a, aws-{env}-app-service-b, ...  │
+│ Changes: Weekly (for scaling/config)                            │
+│ Depends on: Foundation, Platform, Shared Services, Other Apps   │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
+                                │
+                                └
 ┌─────────────────────────────────────────────────────────────────┐
 │ Application Code (Separate Repos)                               │
 │ Repos: service-a/, service-b/, service-c/                       │
 │ Changes: Daily/Hourly (code deployments)                        │
-│ Deploys: Docker images, no Terraform                            │
+│ Builds: Docker images, pushes to registry                       │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                └
+┌─────────────────────────────────────────────────────────────────┐
+│ K8s Manifests Repository (GitOps)                               │
+│ Repo: k8s-manifests/                                            │
+│ Changes: Updated by app CI/CD pipelines                         │
+│ Contains: Kustomize overlays per environment                    │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                └ ArgoCD watches and syncs
+                                └
+┌─────────────────────────────────────────────────────────────────┐
+│ EKS Cluster (Running Applications)                              │
+│ Deployed by: ArgoCD (GitOps)                                    │
+│ No manual kubectl or Terraform for app deployments              │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Consequences
 
 ### Positive
+
 - **Clear separation**: Infrastructure changes separate from code deployments
 - **Reduced state lock contention**: Multiple teams work on different layers
-- **Faster app deployments**: Code deploys without Terraform
+- **Faster app deployments**: Code deploys via ArgoCD GitOps without Terraform
 - **Platform control**: Platform team manages shared infrastructure centrally
 - **Application autonomy**: App teams focus on code, not infrastructure
 - **Scalable**: Easy to add new services without restructuring
 - **Manageable complexity**: Fewer repositories than full multi-repo
 - **Better visibility**: All infrastructure in one place for platform team
+- **GitOps benefits**: Declarative deployments, audit trail, easy rollbacks
 
 ### Negative
+
 - **Learning curve**: Team must understand layering concept
 - **Cross-layer coordination**: Changes spanning layers need coordination
 - **terraform_remote_state**: Must manage cross-layer references
 - **Two repos per service**: App repo + infra definition in monorepo
 
 ### Neutral
+
 - **Deployment split**: Infrastructure and application have different pipelines
 - **Scaling can be done multiple ways**: Terraform, auto-scaling, or API
 
 ## Migration Path
 
 ### For Existing Infrastructure
-1. **Week 1-2**: Create infrastructure monorepo with layer structure
-2. **Week 3**: Import existing infrastructure into appropriate layers
-3. **Week 4**: Set up Terraform Cloud workspaces per layer
-4. **Week 5**: Separate application code from infrastructure
-5. **Week 6**: Update application CI/CD to deploy without Terraform
+
+1. **Week 1-2**: Organize infrastructure monorepo with env-based layer structure
+2. **Week 3**: Import existing infrastructure into appropriate environment/layer directories
+3. **Week 4**: Set up Terraform Cloud workspaces per environment and layer
+4. **Week 5**: Create k8s-manifests repository and set up ArgoCD
+5. **Week 6**: Separate application code from infrastructure
+6. **Week 7**: Update application CI/CD to use GitOps workflow
 
 ### For New Services
-1. Create application infrastructure in `layers/04-applications/{service-name}`
+
+1. Create application infrastructure in `env-{environment}/applications-layer/{service-name}/`
 2. Create separate application code repository
-3. Application CI/CD deploys code only
+3. Add K8s manifests to k8s-manifests repo
+4. Configure ArgoCD application
+5. Application CI/CD updates manifests, ArgoCD deploys
 
 ## Scaling Strategy
 
 ### Manual Scaling
+
 ```bash
 # Option 1: Update Terraform (recommended for permanent changes)
-# In terraform-infrastructure/layers/04-applications/service-a/environments/production/terraform.tfvars
-desired_count = 10
+# In env-production/applications-layer/service-a/terraform.tfvars
+replicas = 10
 
-# Option 2: AWS CLI (for temporary emergency scaling)
-aws ecs update-service --service service-a --desired-count 10
+# Option 2: kubectl (for temporary emergency scaling)
+kubectl scale deployment service-a --replicas=10 -n production
 ```
 
 ### Auto-Scaling (Recommended)
+
 ```hcl
 # Define in Terraform, runs automatically
-resource "aws_appautoscaling_policy" "cpu" {
-  # Scale based on CPU
-  target_value = 75.0
-}
+resource "kubernetes_horizontal_pod_autoscaler_v2" "app" {
+  metadata {
+    name = "service-a-hpa"
+  }
 
-resource "aws_appautoscaling_policy" "memory" {
-  # Scale based on memory
-  target_value = 80.0
-}
+  spec {
+    min_replicas = 2
+    max_replicas = 10
 
-resource "aws_appautoscaling_policy" "custom" {
-  # Scale based on custom metric (request count, queue depth, etc.)
-  target_value = 1000.0
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 75
+        }
+      }
+    }
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "memory"
+        target {
+          type                = "Utilization"
+          average_utilization = 80
+        }
+      }
+    }
+
+    metric {
+      type = "Pods"
+      pods {
+        metric {
+          name = "http_requests_per_second"
+        }
+        target {
+          type          = "AverageValue"
+          average_value = "1000"
+        }
+      }
+    }
+  }
 }
 ```
 
 ### Scheduled Scaling
+
 ```hcl
 # Scale up during business hours
 resource "aws_appautoscaling_scheduled_action" "scale_up" {
@@ -1038,6 +1257,7 @@ resource "aws_appautoscaling_scheduled_action" "scale_down" {
 ## Review Date
 
 This decision should be reviewed in 6 months (April 2026) or when:
+
 - Number of services exceeds 20
 - Team grows beyond 20 engineers
 - Cross-layer dependencies become unmanageable
@@ -1054,7 +1274,8 @@ This decision should be reviewed in 6 months (April 2026) or when:
 
 ---
 
-**Document Information**
+## Document Information
+
 - **Created**: October 28, 2025
 - **Author**: Platform Engineering Team
 - **Reviewers**: [To be assigned]

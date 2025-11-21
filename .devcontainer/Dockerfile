@@ -5,8 +5,7 @@ LABEL maintainer="Andre Dreyer"
 ARG PRODUCT=terraform
 ARG VERSION=1.13.4
 
-RUN apk add --update --no-cache fish starship stow git github-cli gum font-fira-code-nerd
-
+# Install dependencies for Terraform
 RUN apk add --update --virtual .deps --no-cache gnupg && \
     cd /tmp && \
     wget https://releases.hashicorp.com/${PRODUCT}/${VERSION}/${PRODUCT}_${VERSION}_linux_amd64.zip && \
@@ -38,6 +37,9 @@ RUN echo https://downloads.1password.com/linux/alpinelinux/stable/ >> /etc/apk/r
 
 # Install AI Assistants CLIs
 RUN npm install -g @anthropic-ai/claude-code
+
+# Install git and configure user
+RUN apk add git && git config --global user.name "André Dreyer" && git config --global user.email "github@andredreyer.com"
 
 ENV SHELL=/usr/bin/fish
 

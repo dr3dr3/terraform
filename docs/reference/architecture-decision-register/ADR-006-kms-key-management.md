@@ -1,14 +1,17 @@
 # ADR-006: KMS Key Management Strategy
 
 ## Status
-Accepted
+
+Approved
 
 ## Context
-Following the decision to use AWS Systems Manager Parameter Store for secrets management (ADR-005), we need to establish a comprehensive KMS (Key Management Service) key management strategy. While Parameter Store offers default encryption, using customer-managed KMS keys provides enhanced control, auditability, and the ability to implement fine-grained access policies.
+
+Following the decision to use AWS Secrets Manager for secrets management (ADR-005), we need to establish a comprehensive KMS (Key Management Service) key management strategy. While Secrets Manager offers default encryption using AWS-managed keys, using customer-managed KMS keys provides enhanced control, auditability, and the ability to implement fine-grained access policies.
 
 ### Requirements
-- **Encryption at Rest**: All sensitive parameters must be encrypted
-- **Access Control**: Fine-grained control over who can decrypt parameters
+
+- **Encryption at Rest**: All secrets must be encrypted
+- **Access Control**: Fine-grained control over who can decrypt secrets
 - **Auditability**: Track all encryption and decryption operations
 - **Key Rotation**: Regular key rotation for security compliance
 - **Cost Optimization**: Minimize KMS costs while maintaining security
@@ -16,17 +19,20 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 - **Learning Value**: Align with enterprise KMS practices
 
 ### Current State
-- Parameter Store supports both AWS-managed and customer-managed keys
-- SecureString parameters can use either default AWS key or custom KMS keys
+
+- Secrets Manager supports both AWS-managed and customer-managed KMS keys
+- Secrets can use either the default AWS-managed key (aws/secretsmanager) or custom KMS keys
 - KMS charges $1/month per customer-managed key + $0.03 per 10,000 API calls
 
 ### Constraints
+
 - Learning lab budget requires cost optimization
 - Single user/operator (simplified key policies)
 - Must support GitHub Actions OIDC authentication
 - Need to demonstrate production-ready patterns
 
 ## Decision Drivers
+
 1. **Security**: Encryption strength and key management control
 2. **Cost**: Monthly KMS key and API call costs
 3. **Access Control**: Granular permissions for different roles/services
@@ -37,17 +43,20 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 
 ## Options Considered
 
-### Option 1: AWS-Managed Default Key (aws/ssm)
-**Description**: Use the AWS-managed default key for SSM Parameter Store encryption.
+### Option 1: AWS-Managed Default Key (aws/secretsmanager)
+
+**Description**: Use the AWS-managed default key for Secrets Manager encryption.
 
 **Pros**:
+
 - **Zero cost**: No charges for AWS-managed keys
 - Automatic key rotation every 3 years
 - No key management overhead
 - Immediate availability (no setup required)
-- Works out of the box with Parameter Store
+- Works out of the box with Secrets Manager
 
 **Cons**:
+
 - **Cannot customize key policies**: Limited control over access
 - Cannot disable or delete the key
 - Shared across all Parameter Store users in the account
@@ -59,9 +68,11 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 **Cost**: **$0/month**
 
 ### Option 2: Single Customer-Managed Key (All Environments)
+
 **Description**: Create one customer-managed KMS key shared across all environments.
 
 **Pros**:
+
 - Low cost ($1/month total)
 - Simple to manage (single key)
 - Full control over key policy
@@ -70,6 +81,7 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 - Can customize key administrators and users
 
 **Cons**:
+
 - **Security risk**: Compromise of one environment affects all
 - **No environment isolation**: Dev can decrypt prod secrets
 - Not production-grade pattern
@@ -80,9 +92,11 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 **Cost**: **$1/month** + API calls
 
 ### Option 3: Per-Environment Customer-Managed Keys
+
 **Description**: Create separate customer-managed KMS keys for each environment (dev, staging, prod).
 
 **Pros**:
+
 - **Strong environment isolation**: Dev key cannot decrypt prod secrets
 - Independent key rotation schedules
 - Environment-specific access controls
@@ -93,6 +107,7 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 - Clear learning value
 
 **Cons**:
+
 - Higher cost ($1/month per environment)
 - More keys to manage
 - More complex key policies
@@ -101,9 +116,11 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 **Cost**: **$3/month** (dev + staging + prod) + API calls
 
 ### Option 4: Per-Service and Per-Environment Keys
+
 **Description**: Create separate KMS keys for each service within each environment (e.g., database-dev, api-dev, app-dev).
 
 **Pros**:
+
 - Maximum isolation and security
 - Finest-grained access control
 - Service-level key rotation policies
@@ -111,6 +128,7 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 - Clear separation of concerns
 
 **Cons**:
+
 - **High cost**: $1/month per key (potentially 15+ keys)
 - Significant management overhead
 - **Overkill for learning lab**: Too complex for single user
@@ -120,15 +138,18 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 **Cost**: **$15+/month** (5 services × 3 environments)
 
 ### Option 5: Hybrid Approach (AWS-Managed + Customer Keys for Critical)
+
 **Description**: Use AWS-managed key for non-sensitive configs, customer-managed keys for sensitive secrets.
 
 **Pros**:
+
 - Cost optimization (fewer customer keys)
 - Reduced management overhead
 - Tiered security approach
 - Flexibility
 
 **Cons**:
+
 - **Complexity**: Mixed approach harder to understand
 - Need to classify parameters (sensitive vs non-sensitive)
 - Inconsistent encryption strategy
@@ -139,28 +160,34 @@ Following the decision to use AWS Systems Manager Parameter Store for secrets ma
 
 ## Decision
 
-**Selected Option: Option 3 - Per-Environment Customer-Managed Keys**
-
 We will create separate customer-managed KMS keys for each environment (dev, staging, production).
+
+**Selected Option**: Option 3 - Per-Environment Customer-Managed Keys
 
 ## Rationale
 
 ### Security and Isolation
+
 Per-environment keys provide the critical security boundary needed to prevent cross-environment access. This ensures:
+
 - Developers with dev access cannot decrypt production secrets
 - Compromise of dev key doesn't affect production
 - Different rotation schedules for different risk levels
 - Independent key policies per environment
 
 ### Cost Justification
+
 At $3/month total ($1 per environment), the cost is:
-- Minimal for the security benefit gained
-- Still significantly less than Secrets Manager ($6.50/month)
-- Reasonable for a learning lab that teaches production patterns
+
+- Minimal for the security benefit gained (adds only ~$3/month to Secrets Manager's base costs)
+- Combined with Secrets Manager (~$4-8/month), total infrastructure cost remains reasonable
+- Essential for production-grade security patterns
 - Demonstrates real-world cost/security trade-offs
 
 ### Learning Value
+
 This approach teaches:
+
 - KMS key creation and management
 - Key policy design
 - Environment isolation patterns
@@ -169,13 +196,16 @@ This approach teaches:
 - Real-world enterprise practices
 
 ### Production Alignment
+
 Per-environment keys is the standard pattern in production:
+
 - Used by small startups to large enterprises
 - Recommended by AWS security best practices
 - Common in compliance frameworks (SOC2, ISO 27001)
 - Balances security and operational complexity
 
 ### Practical Considerations
+
 - Three keys is manageable for a single operator
 - Clear mental model (one key per environment)
 - Easy to automate with Terraform
@@ -185,24 +215,24 @@ Per-environment keys is the standard pattern in production:
 
 ### Phase 1: KMS Key Creation
 
-```hcl
+```bash
 # Create KMS key for each environment
-resource "aws_kms_key" "parameter_store" {
-  description             = "KMS key for Parameter Store encryption - ${var.environment}"
+resource "aws_kms_key" "secrets_manager" {
+  description             = "KMS key for Secrets Manager encryption - ${var.environment}"
   deletion_window_in_days = var.kms_key_deletion_window
   enable_key_rotation     = true  # Automatic rotation enabled
 
   tags = {
     Environment = var.environment
-    Purpose     = "ParameterStore"
+    Purpose     = "SecretsManager"
     ManagedBy   = "Terraform"
   }
 }
 
 # Create alias for easy reference
-resource "aws_kms_alias" "parameter_store" {
-  name          = "alias/parameter-store-${var.environment}"
-  target_key_id = aws_kms_key.parameter_store.key_id
+resource "aws_kms_alias" "secrets_manager" {
+  name          = "alias/secrets-manager-${var.environment}"
+  target_key_id = aws_kms_key.secrets_manager.key_id
 }
 ```
 
@@ -222,16 +252,24 @@ resource "aws_kms_alias" "parameter_store" {
       "Resource": "*"
     },
     {
-      "Sid": "Allow SSM to use the key",
+      "Sid": "Allow Secrets Manager to use the key",
       "Effect": "Allow",
       "Principal": {
-        "Service": "ssm.amazonaws.com"
+        "Service": "secretsmanager.amazonaws.com"
       },
       "Action": [
         "kms:Decrypt",
+        "kms:Encrypt",
+        "kms:GenerateDataKey",
+        "kms:CreateGrant",
         "kms:DescribeKey"
       ],
-      "Resource": "*"
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "secretsmanager.REGION.amazonaws.com"
+        }
+      }
     },
     {
       "Sid": "Allow GitHub Actions for this environment",
@@ -249,15 +287,32 @@ resource "aws_kms_alias" "parameter_store" {
 }
 ```
 
-### Phase 3: Parameter Store Integration
+### Phase 3: Secrets Manager Integration
 
-```hcl
-# Create SecureString parameter with KMS key
-resource "aws_ssm_parameter" "secure_secret" {
-  name   = "/${var.environment}/database/password"
-  type   = "SecureString"
-  value  = var.db_password
-  key_id = aws_kms_key.parameter_store.id  # Use environment-specific key
+```bash
+# Create secret with customer-managed KMS key
+resource "aws_secretsmanager_secret" "database_credentials" {
+  name        = "${var.environment}/database/credentials"
+  description = "Database credentials for ${var.environment} environment"
+  kms_key_id  = aws_kms_key.secrets_manager.id  # Use environment-specific key
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "database_credentials" {
+  secret_id = aws_secretsmanager_secret.database_credentials.id
+  secret_string = jsonencode({
+    username = "admin"
+    password = random_password.db_master.result
+  })
+}
+
+resource "random_password" "db_master" {
+  length  = 32
+  special = true
 }
 ```
 
@@ -268,14 +323,31 @@ resource "aws_ssm_parameter" "secure_secret" {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "DecryptParameterStore",
+      "Sid": "DecryptSecretsManager",
       "Effect": "Allow",
       "Action": [
         "kms:Decrypt",
-        "kms:DescribeKey"
+        "kms:DescribeKey",
+        "kms:GenerateDataKey"
       ],
       "Resource": [
         "arn:aws:kms:REGION:ACCOUNT_ID:key/KEY_ID_FOR_THIS_ENV"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "secretsmanager.REGION.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "AccessSecretsManager",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:ENV/*"
       ]
     }
   ]
@@ -324,6 +396,7 @@ aws cloudwatch get-metric-statistics \
 ### Key Policy Updates
 
 Key policies should be reviewed and updated:
+
 - When adding new services/roles
 - When modifying environment access
 - During quarterly security reviews
@@ -333,23 +406,26 @@ Key policies should be reviewed and updated:
 ### Disaster Recovery
 
 **Backup Strategy**:
+
 - KMS keys cannot be exported or backed up
 - Key deletion is logged in CloudTrail
 - Parameters encrypted with deleted keys cannot be decrypted
 - **Therefore**: Export and re-encrypt secrets before key deletion
 
 **Recovery Procedure**:
+
 ```bash
-# 1. Export all parameters before key deletion
-aws ssm get-parameters-by-path \
-  --path /${ENV} \
-  --recursive \
-  --with-decryption > backup.json
+# 1. Export all secrets before key deletion
+aws secretsmanager list-secrets \
+  --filters Key=name,Values=${ENV}/ \
+  --query 'SecretList[*].Name' \
+  --output text | xargs -I {} aws secretsmanager get-secret-value \
+  --secret-id {} > backup.json
 
 # 2. Create new KMS key
 terraform apply
 
-# 3. Re-encrypt all parameters with new key
+# 3. Re-encrypt all secrets with new key
 # (Terraform will handle this automatically on next apply)
 ```
 
@@ -357,7 +433,7 @@ terraform apply
 
 ### CloudWatch Alarms
 
-```hcl
+```bash
 # Alert on excessive decrypt operations
 resource "aws_cloudwatch_metric_alarm" "kms_decrypt_rate" {
   alarm_name          = "kms-decrypt-high-rate-${var.environment}"
@@ -371,7 +447,7 @@ resource "aws_cloudwatch_metric_alarm" "kms_decrypt_rate" {
   alarm_description   = "Alert when decrypt operations exceed threshold"
   
   dimensions = {
-    KeyId = aws_kms_key.parameter_store.id
+    KeyId = aws_kms_key.secrets_manager.id
   }
 }
 ```
@@ -390,6 +466,7 @@ aws ce get-cost-and-usage \
 ## Consequences
 
 ### Positive
+
 - **Strong Security**: Environment isolation prevents cross-environment access
 - **Auditability**: CloudTrail provides complete audit trail
 - **Compliance Ready**: Meets common compliance requirements (SOC2, ISO 27001)
@@ -399,17 +476,20 @@ aws ce get-cost-and-usage \
 - **Fine-Grained Control**: Environment-specific policies
 
 ### Negative
+
 - **Cost**: $3/month for all environments (vs $0 for AWS-managed)
 - **Management Overhead**: Three keys to monitor instead of one
 - **Complexity**: More complex than single key or default key
 - **API Costs**: Each decrypt operation charges (though minimal)
 
 ### Neutral
+
 - **Learning Curve**: Requires understanding of KMS concepts
 - **Terraform Complexity**: More resources to manage
 - **CloudTrail Volume**: More events to filter through
 
 ### Mitigations
+
 - **Cost**: $3/month is minimal and within learning lab budget
 - **Management**: Terraform automates most management tasks
 - **Complexity**: Well-documented and follows standard patterns
@@ -425,19 +505,21 @@ If starting with AWS-managed keys:
 # 1. Create new KMS keys
 terraform apply
 
-# 2. Update parameters to use new key
-aws ssm put-parameter \
-  --name /dev/database/password \
-  --value "$EXISTING_VALUE" \
-  --type SecureString \
-  --key-id $NEW_KEY_ID \
-  --overwrite
+# 2. Update secrets to use new key (via Terraform)
+# In your Terraform configuration, add kms_key_id attribute
+resource "aws_secretsmanager_secret" "example" {
+  name       = "dev/database/password"
+  kms_key_id = aws_kms_key.secrets_manager.id
+}
 
-# 3. Update IAM policies to allow KMS decrypt
+# 3. Apply changes
+terraform apply
 
-# 4. Test access
+# 4. Update IAM policies to allow KMS decrypt
 
-# 5. Repeat for all parameters
+# 5. Test access
+
+# 6. Repeat for all secrets
 ```
 
 ### From Single Key to Per-Environment Keys
@@ -448,10 +530,18 @@ If starting with a single shared key:
 # 1. Create environment-specific keys
 terraform apply
 
-# 2. Export parameters from each environment
-aws ssm get-parameters-by-path --path /dev --recursive --with-decryption > dev-backup.json
-aws ssm get-parameters-by-path --path /staging --recursive --with-decryption > staging-backup.json
-aws ssm get-parameters-by-path --path /prod --recursive --with-decryption > prod-backup.json
+# 2. Export secrets from each environment (backup)
+aws secretsmanager list-secrets --filters Key=name,Values=dev/ | \
+  jq -r '.SecretList[].Name' | \
+  xargs -I {} aws secretsmanager get-secret-value --secret-id {} > dev-backup.json
+
+aws secretsmanager list-secrets --filters Key=name,Values=staging/ | \
+  jq -r '.SecretList[].Name' | \
+  xargs -I {} aws secretsmanager get-secret-value --secret-id {} > staging-backup.json
+
+aws secretsmanager list-secrets --filters Key=name,Values=prod/ | \
+  jq -r '.SecretList[].Name' | \
+  xargs -I {} aws secretsmanager get-secret-value --secret-id {} > prod-backup.json
 
 # 3. Update Terraform to use environment-specific keys
 
@@ -468,18 +558,21 @@ terraform apply
 ## Compliance Considerations
 
 ### SOC2 Requirements
+
 - ✅ Encryption at rest (KMS provides)
 - ✅ Key rotation (automatic annual rotation)
 - ✅ Access controls (KMS key policies)
 - ✅ Audit logging (CloudTrail)
 
 ### ISO 27001 Requirements
+
 - ✅ Cryptographic controls (AWS KMS FIPS 140-2 Level 2)
 - ✅ Key management (documented procedures)
 - ✅ Separation of duties (environment isolation)
 - ✅ Monitoring and logging (CloudWatch + CloudTrail)
 
 ### Best Practices Checklist
+
 - ✅ Automatic key rotation enabled
 - ✅ Deletion window configured (7-30 days)
 - ✅ Key policies follow least privilege
@@ -511,16 +604,19 @@ terraform apply
 ### Cost Optimization Strategies
 
 1. **Reduce API Calls**:
+
    - Implement caching in applications
    - Batch parameter retrievals
    - Cache decrypted values (with TTL)
 
 2. **Consolidate for Cost**:
+
    - If budget extremely tight, use single key
    - Trade security isolation for cost savings
    - Can upgrade later when needed
 
 3. **Monitor Usage**:
+
    ```bash
    # Track decrypt operations
    aws cloudwatch get-metric-statistics \
@@ -529,21 +625,26 @@ terraform apply
    ```
 
 ## Related Decisions
-- **ADR-005**: Secret Management Solution Selection - Why Parameter Store
-- **ADR-007**: IAM Policy Design - How roles access keys
-- **ADR-008**: Secret Rotation Patterns - When to re-encrypt
+
+- **ADR-005**: Secret Management Solution Selection - Why Secrets Manager
+- **ADR-007**: IAM Policy Design - How roles access keys and secrets
+- **ADR-008**: Secret Rotation Patterns - Automatic rotation with Secrets Manager
 
 ## References
+
 - [AWS KMS Best Practices](https://docs.aws.amazon.com/kms/latest/developerguide/best-practices.html)
 - [AWS KMS Pricing](https://aws.amazon.com/kms/pricing/)
-- [Parameter Store with KMS](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-securestring.html)
+- [Secrets Manager with KMS](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html)
 - [KMS Key Rotation](https://docs.aws.amazon.com/kms/latest/developerguide/rotate-keys.html)
 - [CloudTrail with KMS](https://docs.aws.amazon.com/kms/latest/developerguide/logging-using-cloudtrail.html)
+- [Secrets Manager Best Practices](https://docs.aws.amazon.com/secretsmanager/latest/userguide/best-practices.html)
 
 ## Review Schedule
+
 - **Initial Review**: After 3 months of operation
 - **Regular Review**: Quarterly
 - **Triggers for Immediate Review**:
+
   - Security incident
   - Compliance requirement changes
   - Budget constraints
@@ -553,5 +654,4 @@ terraform apply
 ---
 
 **Date**: 2025-10-31  
-**Last Updated**: 2025-10-31  
-**Status**: Accepted
+**Last Updated**: 2025-11-17  

@@ -1,7 +1,8 @@
 # Architecture Decision Record: Terraform Workflow - Git Branching, CI/CD, and Terraform Cloud Setup
 
 ## Status
-Proposed
+
+Approved
 
 ## Context
 
@@ -12,6 +13,7 @@ We need to establish how our Infrastructure as Code (IaC) will flow from develop
 3. **Terraform Cloud Workflow**: Whether to use VCS-driven, CLI-driven, or API-driven workflow
 
 ### Current Situation
+
 - Using Terraform Cloud for state management (per ADR-001)
 - Separate AWS accounts for Dev, Staging, and Production environments
 - Team of ~5 engineers working on infrastructure
@@ -19,6 +21,7 @@ We need to establish how our Infrastructure as Code (IaC) will flow from develop
 - Requirement for progressive deployment (dev → staging → prod)
 
 ### Key Requirements
+
 - Clear promotion path from dev to production
 - Peer review for all infrastructure changes
 - Automated validation and testing
@@ -41,11 +44,13 @@ We need to establish how our Infrastructure as Code (IaC) will flow from develop
 
 ### Option 1: VCS-Driven Workflow with Environment Branches
 
-#### Overview
+#### Overview - Option 1
+
 Use Terraform Cloud's VCS-driven workflow with separate Git branches per environment.
 
-#### Configuration
-```
+#### Configuration - Option 1
+
+```bash
 Git Branches:
 ├── main (production)
 ├── staging
@@ -66,7 +71,8 @@ terraform/
 └── prod.tfvars       # Prod-specific values
 ```
 
-#### Workflow
+#### Workflow - Option 1
+
 1. Developer creates feature branch from `dev`
 2. Opens PR to `dev` branch
 3. Terraform Cloud automatically runs speculative plan on PR
@@ -78,7 +84,8 @@ terraform/
 9. Manual approval required in Terraform Cloud
 10. Merge to `main` → Terraform Cloud applies to production
 
-#### Pros
+#### Pros - Option 1
+
 - **Maximum automation**: Terraform Cloud handles all planning and applying
 - **GitOps native**: Perfect alignment with GitOps principles
 - **Simple setup**: Minimal configuration required
@@ -88,7 +95,8 @@ terraform/
 - **Webhook-driven**: Automatic triggering on commits
 - **Cost control**: Plan/apply happens in Terraform Cloud (no CI runners needed)
 
-#### Cons
+#### Cons - Option 1
+
 - **Branch duplication**: Same code exists on multiple branches
 - **Merge conflicts**: Cherry-picking or merging between branches can be complex
 - **Limited pre-apply validation**: Can't easily run custom scripts before Terraform
@@ -96,7 +104,8 @@ terraform/
 - **All-or-nothing**: Can't selectively apply parts of configuration
 - **Emergency fixes**: Hotfixes to prod must be backported to lower environments
 
-#### Best For
+#### Best For - Option 1
+
 - Teams new to Terraform and IaC
 - Organizations wanting maximum automation
 - Teams without existing CI/CD infrastructure
@@ -106,11 +115,13 @@ terraform/
 
 ### Option 2: VCS-Driven Workflow with Mono-Branch + Directories
 
-#### Overview
+#### Overview - Option 2
+
 Single main branch with environment-specific directories, each linked to separate Terraform Cloud workspace.
 
-#### Configuration
-```
+#### Configuration - Option 2
+
+```bash
 Git Branches:
 └── main
 
@@ -143,7 +154,8 @@ terraform/
 │       └── backend.tf
 ```
 
-#### Workflow
+#### Workflow - Option 2
+
 1. Developer creates feature branch from `main`
 2. Makes changes to relevant environment directory
 3. Opens PR to `main`
@@ -155,7 +167,8 @@ terraform/
    - Staging: Auto-apply enabled with notifications
    - Production: Manual apply required (approval gate)
 
-#### Pros
+#### Pros - Option 2
+
 - **No branch duplication**: Single source of truth on main branch
 - **No merge conflicts between environments**: Each environment is separate directory
 - **Clear separation**: Easy to see what differs between environments
@@ -164,14 +177,16 @@ terraform/
 - **Easier to maintain**: Changes to modules propagate naturally
 - **Selective deployment**: Can choose which environments to update
 
-#### Cons
+#### Cons - Option 2
+
 - **Less isolation**: All environments change together on main branch
 - **Requires discipline**: Must manually control which directories are modified
 - **Risk of accidental changes**: Could modify prod when intending to change dev
 - **Less clear promotion**: No explicit "promote to staging" action
 - **Workspace configuration complexity**: Must configure working directory per workspace
 
-#### Best For
+#### Best For - Option 2
+
 - Teams experienced with Terraform
 - Organizations with mature module libraries
 - Projects where environments should stay in sync
@@ -181,11 +196,13 @@ terraform/
 
 ### Option 3: CLI-Driven Workflow with External CI/CD
 
-#### Overview
+#### Overview - Option 3
+
 Use Terraform Cloud for state/collaboration, but trigger runs via CI/CD pipeline (GitHub Actions, GitLab CI, etc.).
 
-#### Configuration
-```
+#### Configuration - Option 3
+
+```bash
 Git Branches:
 └── main (with environment directories)
 
@@ -203,7 +220,8 @@ CI/CD Pipeline Stages:
 6. Notify (Slack, email)
 ```
 
-#### Workflow
+#### Workflow - Option 3
+
 1. Developer creates feature branch from `main`
 2. Opens PR to `main`
 3. CI/CD pipeline runs:
@@ -217,7 +235,8 @@ CI/CD Pipeline Stages:
 7. Staging: Automatically applies after dev succeeds
 8. Production: Requires manual approval in CI/CD, then applies
 
-#### Pros
+#### Pros - Option 3
+
 - **Maximum flexibility**: Full control over pre/post deployment actions
 - **Custom validation**: Run any validation tools in pipeline
 - **Integration options**: Integrate with existing CI/CD tools
@@ -226,7 +245,8 @@ CI/CD Pipeline Stages:
 - **Multi-tool support**: Can use Terragrunt, Atlantis, or other tools
 - **Familiar CI/CD patterns**: Developers already know GitHub Actions/GitLab CI
 
-#### Cons
+#### Cons - Option 3
+
 - **More complexity**: Must maintain CI/CD pipeline configuration
 - **Additional cost**: Requires CI/CD runners
 - **More moving parts**: More things that can break
@@ -235,7 +255,8 @@ CI/CD Pipeline Stages:
 - **Requires expertise**: Need to understand both Terraform and CI/CD tool
 - **Credential management**: Must securely manage Terraform Cloud API tokens in CI/CD
 
-#### Best For
+#### Best For - Option 3
+
 - Teams with existing CI/CD investment
 - Organizations needing complex pre-deployment validation
 - Advanced teams comfortable with CI/CD and Terraform
@@ -245,19 +266,23 @@ CI/CD Pipeline Stages:
 
 ### Option 4: Hybrid - VCS-Driven + CLI for Special Cases
 
-#### Overview
+#### Overview - Option 4
+
 Primary workflow uses VCS-driven for normal changes, but CLI-driven available for emergency fixes or advanced scenarios.
 
-#### Configuration
+#### Configuration - Option 4
+
 - Most workspaces: VCS-driven (primary workflow)
 - Special workspace: CLI-driven (for emergencies, testing, or advanced use cases)
 
-#### Pros
+#### Pros - Option 4
+
 - Best of both worlds: Simplicity of VCS + flexibility when needed
 - Gradual adoption: Can start with VCS and add CLI later
 - Emergency path: CLI option for hotfixes bypassing full workflow
 
-#### Cons
+#### Cons - Option 4
+
 - Two different workflows to maintain
 - Team confusion about which to use when
 - Added complexity without clear benefit for small teams
@@ -282,29 +307,35 @@ Primary workflow uses VCS-driven for normal changes, but CLI-driven available fo
 
 ## Decision
 
-**Recommended: Option 2 - VCS-Driven Workflow with Mono-Branch + Directories**
+**Recommended:** Option 2 - VCS-Driven Workflow with Mono-Branch + Directories
 
 ## Rationale
 
 Given your team size (~5 engineers), separate AWS accounts per environment, and the need for both simplicity and progressive deployment, the mono-branch with directories approach is optimal for the following reasons:
 
 ### 1. Avoids Branch Management Complexity
+
 Branch-based strategies lead to inevitable merge conflicts when multiple engineers work on feature branches, as changes to common modules must be carefully synchronized across environment branches. With directories, you maintain a single source of truth on the main branch.
 
 ### 2. Leverages Terraform Cloud's Native Strengths
+
 VCS integrations trigger Terraform runs automatically and teams no longer need to manually run terraform plan or apply, reducing human error and ensuring consistency across environments. This maximizes automation while keeping setup simple.
 
 ### 3. Module Reuse and Maintainability
+
 Directory structure encourages proper module design where common infrastructure patterns are abstracted into reusable modules. Changes to modules automatically affect all environments that use them, keeping infrastructure consistent.
 
 ### 4. Clear Separation of Concerns
+
 Each environment directory contains its own `terraform.tfvars` making environment-specific configurations explicit and easy to review. This reduces risk of accidental cross-environment changes.
 
 ### 5. Aligns with Existing Decision
+
 This approach works seamlessly with Terraform Cloud (ADR-001), using its native VCS-driven workflow without requiring additional CI/CD tooling investment.
 
 ### 6. Progressive Deployment Through Terraform Cloud Settings
-```
+
+```bash
 Dev Workspace: 
 - Auto-apply: Enabled
 - Notifications: Basic
@@ -320,7 +351,9 @@ Production Workspace:
 ```
 
 ### 7. Scalability
+
 As your team grows and infrastructure becomes more complex, this approach scales well. You can:
+
 - Add new environments by creating new directories
 - Extract common patterns into modules
 - Implement Sentinel policies for governance
@@ -330,7 +363,8 @@ As your team grows and infrastructure becomes more complex, this approach scales
 
 ### Phase 1: Repository Setup (Week 1)
 
-**Step 1: Create Directory Structure**
+#### Step 1: Create Directory Structure
+
 ```bash
 terraform/
 ├── modules/
@@ -357,9 +391,11 @@ terraform/
         └── TERRAFORM-BEST-PRACTICES.md
 ```
 
-**Step 2: Configure Git Branch Protection**
+#### Step 2: Configure Git Branch Protection
+
 ```yaml
 main branch:
+
   - Require pull request before merging
   - Require at least 1 approval
   - Require status checks to pass (Terraform plans)
@@ -369,8 +405,9 @@ main branch:
   - Do not allow deletions
 ```
 
-**Step 3: Set Up Terraform Cloud Workspaces**
-```
+#### Step 3: Set Up Terraform Cloud Workspaces
+
+```bash
 For each environment (dev, staging, production):
 1. Create workspace in Terraform Cloud
 2. Link to GitHub repository (main branch)
@@ -384,7 +421,8 @@ For each environment (dev, staging, production):
 
 ### Phase 2: Workspace Configuration (Week 1-2)
 
-**Development Workspace**
+#### Development Workspace
+
 ```hcl
 # Settings in Terraform Cloud UI
 Name: aws-infrastructure-dev
@@ -410,7 +448,8 @@ environment: dev
 aws_account_id: [Dev Account ID]
 ```
 
-**Staging Workspace**
+#### Staging Workspace
+
 ```hcl
 Name: aws-infrastructure-staging
 Auto Apply: Enabled
@@ -419,7 +458,8 @@ Notifications: Slack (#infrastructure-staging)
 # VCS Triggers - same as dev
 ```
 
-**Production Workspace**
+#### Production Workspace
+
 ```hcl
 Name: aws-infrastructure-production
 Auto Apply: Disabled  # CRITICAL: Manual approval required
@@ -431,7 +471,8 @@ Notifications: Slack (#infrastructure-production) + Email
 
 ### Phase 3: Module Development (Week 2-3)
 
-**Create Reusable Modules**
+#### Create Reusable Modules
+
 ```hcl
 # Example: modules/vpc/main.tf
 variable "environment" {
@@ -465,7 +506,8 @@ output "vpc_id" {
 }
 ```
 
-**Environment Configuration**
+#### Environment Configuration
+
 ```hcl
 # environments/dev/main.tf
 terraform {
@@ -524,7 +566,8 @@ vpc_cidr_block = "10.0.0.0/16"
 
 ### Phase 4: Sentinel Policies (Week 3-4)
 
-**Implement Policy as Code**
+#### Implement Policy as Code
+
 ```hcl
 # policies/require-tags.sentinel
 import "tfplan/v2" as tfplan
@@ -558,12 +601,14 @@ main = rule {
 
 ### Phase 5: Team Enablement (Week 4)
 
-**Documentation**
+#### Documentation
+
 - Update TERRAFORM-BEST-PRACTICES.md with team-specific workflows
 - Create runbooks for common scenarios
 - Document emergency procedures
 
-**Team Training**
+#### Team Training
+
 - Walkthrough of new workflow
 - Practice PRs in dev environment
 - Review Terraform Cloud UI
@@ -665,6 +710,7 @@ cd environments/staging
 ## Consequences
 
 ### Positive
+
 - **Simple mental model**: One branch, environments as directories
 - **Fast feedback**: Speculative plans on every PR automatically
 - **Low operational overhead**: No CI/CD infrastructure to maintain
@@ -675,12 +721,14 @@ cd environments/staging
 - **Scales with team**: Easy to add environments or split workspaces
 
 ### Negative
+
 - **Requires discipline**: Developers must be careful which directories they modify
 - **Less protection against accidents**: Could theoretically modify prod when intending dev
 - **Limited pre-deployment customization**: Can't easily run complex validation before Terraform
 - **All environments update together**: PR to main affects all modified directories
 
 ### Mitigations for Negatives
+
 1. **Branch protection rules**: Require reviews for all PRs
 2. **CODEOWNERS file**: Require specific approvals for production directory
 3. **Path-based triggers**: Each workspace only triggers on its directory
@@ -693,9 +741,10 @@ cd environments/staging
 
 If the team grows significantly (>15 engineers) or needs more complex validation, consider migrating to:
 
-**Option 3: CLI-Driven + GitHub Actions**
+**Option 3:** CLI-Driven + GitHub Actions
 
 This would provide:
+
 - More sophisticated pre-deployment validation
 - Integration with additional security scanning tools
 - More flexible deployment patterns (blue/green, canary)
@@ -706,6 +755,7 @@ However, this adds significant complexity and should only be considered when the
 ## Review Date
 
 This decision should be reviewed in 6 months (April 2026) or when:
+
 - Team size exceeds 10 engineers
 - Number of environments exceeds 5
 - Complex pre-deployment requirements emerge (compliance, advanced security)
@@ -722,7 +772,8 @@ This decision should be reviewed in 6 months (April 2026) or when:
 
 ---
 
-**Document Information**
+## Document Information
+
 - **Created**: October 28, 2025
 - **Author**: Platform Engineering Team
 - **Reviewers**: [To be assigned]

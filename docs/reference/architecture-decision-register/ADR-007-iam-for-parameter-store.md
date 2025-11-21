@@ -1,12 +1,15 @@
-# ADR-007: IAM Policy Design for Parameter Store Access
+# ADR-007: IAM Policy Design for Secrets Manager Access
 
 ## Status
-Accepted
+
+Approved
 
 ## Context
-Following decisions on using AWS Parameter Store (ADR-005) and implementing per-environment KMS keys (ADR-006), we need to establish a comprehensive IAM policy design that provides secure, least-privilege access to parameters. The challenge is balancing security, operational efficiency, and learning value while supporting both GitHub Actions automation and potential future service integrations.
+
+Following decisions on using AWS Secrets Manager (ADR-005) and implementing per-environment KMS keys (ADR-006), we need to establish a comprehensive IAM policy design that provides secure, least-privilege access to secrets. The challenge is balancing security, operational efficiency, and learning value while supporting both GitHub Actions automation and potential future service integrations.
 
 ### Requirements
+
 - **Least Privilege**: Grant only necessary permissions
 - **Environment Isolation**: Prevent cross-environment access
 - **Role-Based Access**: Support different personas (CI/CD, applications, operators)
@@ -16,6 +19,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 - **Learning Value**: Demonstrate enterprise IAM patterns
 
 ### Current Landscape
+
 - GitHub Actions is the primary automation tool
 - Single operator (personal learning lab)
 - Three environments (dev, staging, prod)
@@ -23,12 +27,14 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 - Future: May add ECS tasks, Lambda functions, EC2 instances
 
 ### Constraints
+
 - Must work with GitHub OIDC provider
 - Need to demonstrate production patterns
 - Single AWS account (no cross-account complexity yet)
 - Learning lab context (favor clarity over extreme granularity)
 
 ## Decision Drivers
+
 1. **Security**: Prevent unauthorized access and privilege escalation
 2. **Operational Simplicity**: Easy to understand and maintain
 3. **Flexibility**: Support current and future use cases
@@ -40,6 +46,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 ## Options Considered
 
 ### Option 1: Single Wide-Open Policy
+
 **Description**: One IAM policy with broad permissions for all environments and services.
 
 ```json
@@ -48,7 +55,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": "ssm:*",
+      "Action": "secretsmanager:*",
       "Resource": "*"
     },
     {
@@ -61,12 +68,14 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 ```
 
 **Pros**:
+
 - Simple to implement
 - No permission issues ever
 - Easy to understand
 - Zero maintenance
 
 **Cons**:
+
 - **Major security risk**: No environment isolation
 - Violates least privilege principle
 - **Not production-ready**: Would fail security audits
@@ -78,21 +87,22 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 **Security Score**: ⚠️ 1/10 - Unacceptable
 
 ### Option 2: Environment-Scoped Policies
-**Description**: Separate policies for each environment, granting access only to that environment's parameters.
+
+**Description**: Separate policies for each environment, granting access only to that environment's secrets.
 
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadDevParameters",
+      "Sid": "ReadDevSecrets",
       "Effect": "Allow",
       "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecretVersionIds"
       ],
-      "Resource": "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/dev/*"
+      "Resource": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:dev/*"
     },
     {
       "Sid": "DecryptDevKMS",
@@ -108,6 +118,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 ```
 
 **Pros**:
+
 - **Strong environment isolation**: Dev cannot access prod
 - Follows least privilege per environment
 - Production-ready pattern
@@ -116,14 +127,16 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 - Easy to implement with Terraform
 
 **Cons**:
+
 - Cannot differentiate between services within an environment
-- All parameters in an environment have same access level
+- All secrets in an environment have same access level
 - May be too broad for high-security prod environments
 
 **Cost**: $0 (IAM is free)
 **Security Score**: ✅ 7/10 - Good for most cases
 
 ### Option 3: Service and Environment Scoped Policies
+
 **Description**: Policies scoped to both environment AND service (e.g., database, API, app).
 
 ```json
@@ -131,16 +144,15 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadDevDatabaseParameters",
+      "Sid": "ReadDevDatabaseSecrets",
       "Effect": "Allow",
       "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
       ],
       "Resource": [
-        "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/dev/database/*",
-        "arn:aws:ssm:us-east-1:ACCOUNT_ID:parameter/dev/app/*"
+        "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:dev/database/*",
+        "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:dev/app/*"
       ]
     }
   ]
@@ -148,6 +160,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 ```
 
 **Pros**:
+
 - **Maximum least privilege**: Each service sees only its secrets
 - Excellent security posture
 - Very granular audit trails
@@ -155,6 +168,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 - Demonstrates advanced IAM
 
 **Cons**:
+
 - **Complex**: Many more policies to manage
 - **Overkill for single user**: Unnecessary granularity
 - Harder to maintain
@@ -165,49 +179,72 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 **Security Score**: ✅ 9/10 - Enterprise-grade
 
 ### Option 4: Read-Only vs Read-Write Policies
+
 **Description**: Separate policies for read-only access (applications) and read-write access (operators/automation).
 
 **Read-Only Policy**:
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadParameters",
+      "Sid": "ReadSecrets",
       "Effect": "Allow",
       "Action": [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath",
-        "ssm:DescribeParameters"
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:ListSecretVersionIds"
       ],
-      "Resource": "arn:aws:ssm:*:*:parameter/dev/*"
+      "Resource": "arn:aws:secretsmanager:*:*:secret:dev/*"
+    },
+    {
+      "Sid": "ListSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:ListSecrets"
+      ],
+      "Resource": "*"
     }
   ]
 }
 ```
 
 **Read-Write Policy**:
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ManageParameters",
+      "Sid": "ManageSecrets",
       "Effect": "Allow",
       "Action": [
-        "ssm:PutParameter",
-        "ssm:DeleteParameter",
-        "ssm:GetParameter*",
-        "ssm:DescribeParameters"
+        "secretsmanager:CreateSecret",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource"
       ],
-      "Resource": "arn:aws:ssm:*:*:parameter/dev/*"
+      "Resource": "arn:aws:secretsmanager:*:*:secret:dev/*"
+    },
+    {
+      "Sid": "ListSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:ListSecrets"
+      ],
+      "Resource": "*"
     }
   ]
 }
 ```
 
 **Pros**:
+
 - Clear separation of concerns
 - Applications cannot modify secrets
 - Reduces blast radius of compromised credentials
@@ -215,6 +252,7 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 - Good for different personas
 
 **Cons**:
+
 - More policies to manage
 - Need to assign correctly to each role
 - Single-user lab doesn't benefit much initially
@@ -223,15 +261,18 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 **Security Score**: ✅ 8/10 - Very good
 
 ### Option 5: Hybrid Approach (Environment + Permission Level)
+
 **Description**: Combine environment scoping with read-only/read-write distinction.
 
 **Pros**:
+
 - Best of both worlds
 - Environment isolation + permission levels
 - Scalable to future needs
 - Professional pattern
 
 **Cons**:
+
 - Most complex option
 - More policies to maintain
 - May be overkill initially
@@ -241,25 +282,30 @@ Following decisions on using AWS Parameter Store (ADR-005) and implementing per-
 
 ## Decision
 
-**Selected Option: Option 2 with Option 4 characteristics - Environment-Scoped Policies with Read-Only GitHub Actions**
-
 We will implement environment-scoped policies that:
+
 1. Isolate environments from each other
 2. Grant GitHub Actions read-only access
 3. Allow read-write access for operators (via AWS CLI)
 4. Provide clear upgrade path to service-level scoping
 
+**Selected Option**: Option 2 with Option 4 characteristics - Environment-Scoped Policies with Read-Only GitHub Actions
+
 ## Rationale
 
 ### Security Balance
+
 Environment-scoped policies provide strong security without excessive complexity:
+
 - Dev workflows cannot access prod secrets
 - GitHub Actions has minimal permissions (read-only)
 - Operators retain write access when needed
 - Clear security boundaries
 
 ### Learning Value
+
 This approach teaches:
+
 - Least privilege principle in practice
 - Resource-based access control
 - OIDC authentication patterns
@@ -267,19 +313,24 @@ This approach teaches:
 - Environment isolation strategies
 
 ### Operational Simplicity
+
 - Three primary policies (one per environment)
 - Easy to understand and explain
 - Simple to extend with new services
 - Clear mental model for single operator
 
 ### Future-Proof
+
 Easy migration path to:
+
 - Service-scoped policies (when team grows)
 - Cross-account access (when multi-account needed)
 - Additional role types (Lambda, ECS, etc.)
 
 ### Production Alignment
+
 This pattern is used by:
+
 - Small to medium startups
 - Teams transitioning to better security
 - Organizations balancing security and agility
@@ -335,27 +386,27 @@ resource "aws_iam_role" "github_actions_dev" {
 }
 ```
 
-### Phase 3: Read-Only Parameter Store Policy
+### Phase 3: Read-Only Secrets Manager Policy
 
 ```hcl
-# Read-only access to dev parameters
-resource "aws_iam_policy" "parameter_store_read_dev" {
-  name        = "parameter-store-read-dev"
-  description = "Read-only access to dev Parameter Store parameters"
+# Read-only access to dev secrets
+resource "aws_iam_policy" "secrets_manager_read_dev" {
+  name        = "secrets-manager-read-dev"
+  description = "Read-only access to dev Secrets Manager secrets"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ReadDevParameters"
+        Sid    = "ReadDevSecrets"
         Effect = "Allow"
         Action = [
-          "ssm:GetParameter",
-          "ssm:GetParameters",
-          "ssm:GetParametersByPath"
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:ListSecretVersionIds"
         ]
         Resource = [
-          "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/dev/*"
+          "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:dev/*"
         ]
       },
       {
@@ -366,14 +417,14 @@ resource "aws_iam_policy" "parameter_store_read_dev" {
           "kms:DescribeKey"
         ]
         Resource = [
-          aws_kms_key.parameter_store_dev.arn
+          aws_kms_key.secrets_manager_dev.arn
         ]
       },
       {
-        Sid    = "DescribeParameters"
+        Sid    = "ListSecrets"
         Effect = "Allow"
         Action = [
-          "ssm:DescribeParameters"
+          "secretsmanager:ListSecrets"
         ]
         Resource = "*"
       }
@@ -385,28 +436,31 @@ resource "aws_iam_policy" "parameter_store_read_dev" {
 ### Phase 4: Read-Write Policy (for Operators)
 
 ```hcl
-# Read-write access to dev parameters
-resource "aws_iam_policy" "parameter_store_write_dev" {
-  name        = "parameter-store-write-dev"
-  description = "Read-write access to dev Parameter Store parameters"
+# Read-write access to dev secrets
+resource "aws_iam_policy" "secrets_manager_write_dev" {
+  name        = "secrets-manager-write-dev"
+  description = "Read-write access to dev Secrets Manager secrets"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ManageDevParameters"
+        Sid    = "ManageDevSecrets"
         Effect = "Allow"
         Action = [
-          "ssm:PutParameter",
-          "ssm:DeleteParameter",
-          "ssm:GetParameter",
-          "ssm:GetParameters",
-          "ssm:GetParametersByPath",
-          "ssm:AddTagsToResource",
-          "ssm:RemoveTagsFromResource"
+          "secretsmanager:CreateSecret",
+          "secretsmanager:UpdateSecret",
+          "secretsmanager:DeleteSecret",
+          "secretsmanager:PutSecretValue",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:ListSecretVersionIds",
+          "secretsmanager:TagResource",
+          "secretsmanager:UntagResource",
+          "secretsmanager:RestoreSecret"
         ]
         Resource = [
-          "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/dev/*"
+          "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:dev/*"
         ]
       },
       {
@@ -419,14 +473,14 @@ resource "aws_iam_policy" "parameter_store_write_dev" {
           "kms:GenerateDataKey"
         ]
         Resource = [
-          aws_kms_key.parameter_store_dev.arn
+          aws_kms_key.secrets_manager_dev.arn
         ]
       },
       {
-        Sid    = "DescribeParameters"
+        Sid    = "ListSecrets"
         Effect = "Allow"
         Action = [
-          "ssm:DescribeParameters"
+          "secretsmanager:ListSecrets"
         ]
         Resource = "*"
       }
@@ -441,7 +495,7 @@ resource "aws_iam_policy" "parameter_store_write_dev" {
 # Attach read-only policy to GitHub Actions role
 resource "aws_iam_role_policy_attachment" "github_actions_dev_read" {
   role       = aws_iam_role.github_actions_dev.name
-  policy_arn = aws_iam_policy.parameter_store_read_dev.arn
+  policy_arn = aws_iam_policy.secrets_manager_read_dev.arn
 }
 ```
 
@@ -461,6 +515,7 @@ resource "aws_iam_role_policy_attachment" "github_actions_dev_read" {
 ### Permission Boundaries
 
 Each environment policy explicitly denies:
+
 - Cross-environment access
 - KMS key usage from other environments
 - Parameter creation in other environments
@@ -468,31 +523,37 @@ Each environment policy explicitly denies:
 ## IAM Best Practices Applied
 
 ### 1. Least Privilege
+
 - ✅ Grant only necessary permissions
 - ✅ Read-only where possible (GitHub Actions)
 - ✅ Environment-scoped resources
 - ✅ No wildcard (*) in resource ARNs
 
 ### 2. Use IAM Roles (Not Users)
+
 - ✅ GitHub Actions uses OIDC role (no access keys)
 - ✅ Future services will use IAM roles
 - ✅ No long-lived credentials
 
 ### 3. Enable MFA for Sensitive Operations
+
 - ⚠️ Not yet implemented (future enhancement)
 - Can add MFA requirement for production write access
 
 ### 4. Rotate Credentials
+
 - ✅ OIDC tokens short-lived (1 hour)
 - ✅ No access keys to rotate
 - ✅ Automatic token refresh
 
 ### 5. Use Policy Conditions
+
 - ✅ OIDC condition on GitHub repo
 - ✅ Can add IP restrictions
 - ✅ Can add time-based restrictions
 
 ### 6. Monitor and Audit
+
 - ✅ CloudTrail logs all API calls
 - ✅ Can create CloudWatch alarms
 - ✅ Policy changes tracked in Terraform
@@ -501,24 +562,29 @@ Each environment policy explicitly denies:
 
 ### Defense in Depth
 
-**Layer 1: Network** (Future)
-- VPC endpoints for SSM
+#### Layer 1: Network (Future)
+
+- VPC endpoints for Secrets Manager
 - Private subnet access only
 
-**Layer 2: IAM Authentication**
+#### Layer 2: IAM Authentication
+
 - ✅ OIDC for GitHub Actions
 - ✅ IAM users/roles for operators
 
-**Layer 3: IAM Authorization**
+#### Layer 3: IAM Authorization
+
 - ✅ Environment-scoped policies
 - ✅ Resource-level permissions
 - ✅ Read vs write separation
 
-**Layer 4: Encryption**
-- ✅ KMS encryption at rest (ADR-002)
+#### Layer 4: Encryption
+
+- ✅ KMS encryption at rest (ADR-006)
 - ✅ TLS encryption in transit
 
-**Layer 5: Audit**
+#### Layer 5: Audit
+
 - ✅ CloudTrail logging
 - ✅ Parameter version history
 - ✅ KMS key usage tracking
@@ -529,10 +595,10 @@ Each environment policy explicitly denies:
 |--------|-----------|---------------|
 | Compromised GitHub token | Short-lived OIDC tokens (1hr) | ✅ High |
 | Cross-environment access | Environment-scoped policies | ✅ High |
-| Unauthorized parameter read | IAM policy enforcement | ✅ High |
-| Parameter tampering | Read-only GitHub Actions role | ✅ High |
+| Unauthorized secret read | IAM policy enforcement | ✅ High |
+| Secret tampering | Read-only GitHub Actions role | ✅ High |
 | Privilege escalation | No IAM:* permissions granted | ✅ High |
-| Deleted parameters | Parameter version history | ⚠️ Medium |
+| Deleted secrets | Secret version history & recovery window | ✅ High |
 | KMS key deletion | Deletion window (7-30 days) | ✅ High |
 
 ## Testing Strategy
@@ -540,24 +606,21 @@ Each environment policy explicitly denies:
 ### Policy Validation
 
 ```bash
-# Test GitHub Actions role can read dev parameters
-aws ssm get-parameter \
-  --name /dev/database/password \
-  --with-decryption \
+# Test GitHub Actions role can read dev secrets
+aws secretsmanager get-secret-value \
+  --secret-id dev/database/password \
   --role-arn arn:aws:iam::ACCOUNT:role/github-actions-dev
 
-# Test GitHub Actions role CANNOT read prod parameters
-aws ssm get-parameter \
-  --name /prod/database/password \
-  --with-decryption \
+# Test GitHub Actions role CANNOT read prod secrets
+aws secretsmanager get-secret-value \
+  --secret-id prod/database/password \
   --role-arn arn:aws:iam::ACCOUNT:role/github-actions-dev
 # Should return: AccessDenied
 
 # Test GitHub Actions role CANNOT write
-aws ssm put-parameter \
-  --name /dev/test/param \
-  --value "test" \
-  --type String \
+aws secretsmanager create-secret \
+  --name dev/test/secret \
+  --secret-string "test" \
   --role-arn arn:aws:iam::ACCOUNT:role/github-actions-dev
 # Should return: AccessDenied
 ```
@@ -568,14 +631,14 @@ aws ssm put-parameter \
 # Simulate read access to dev
 aws iam simulate-principal-policy \
   --policy-source-arn arn:aws:iam::ACCOUNT:role/github-actions-dev \
-  --action-names ssm:GetParameter \
-  --resource-arns "arn:aws:ssm:us-east-1:ACCOUNT:parameter/dev/database/password"
+  --action-names secretsmanager:GetSecretValue \
+  --resource-arns "arn:aws:secretsmanager:us-east-1:ACCOUNT:secret:dev/database/password-*"
 
 # Simulate write access (should be denied)
 aws iam simulate-principal-policy \
   --policy-source-arn arn:aws:iam::ACCOUNT:role/github-actions-dev \
-  --action-names ssm:PutParameter \
-  --resource-arns "arn:aws:ssm:us-east-1:ACCOUNT:parameter/dev/database/password"
+  --action-names secretsmanager:CreateSecret \
+  --resource-arns "arn:aws:secretsmanager:us-east-1:ACCOUNT:secret:dev/database/password"
 ```
 
 ### Automated Testing in CI
@@ -585,13 +648,13 @@ aws iam simulate-principal-policy \
 - name: Test IAM Permissions
   run: |
     # Should succeed
-    aws ssm get-parameter --name /dev/test/param || exit 1
+    aws secretsmanager get-secret-value --secret-id dev/test/secret || exit 1
     
     # Should fail
-    aws ssm get-parameter --name /prod/test/param && exit 1 || echo "Correctly denied"
+    aws secretsmanager get-secret-value --secret-id prod/test/secret && exit 1 || echo "Correctly denied"
     
     # Should fail
-    aws ssm put-parameter --name /dev/test --value "x" && exit 1 || echo "Correctly denied"
+    aws secretsmanager create-secret --name dev/test --secret-string "x" && exit 1 || echo "Correctly denied"
 ```
 
 ## Monitoring and Alerts
@@ -600,44 +663,44 @@ aws iam simulate-principal-policy \
 
 ```hcl
 # Alert on unauthorized access attempts
-resource "aws_cloudwatch_log_metric_filter" "unauthorized_ssm_access" {
-  name           = "UnauthorizedSSMAccess"
+resource "aws_cloudwatch_log_metric_filter" "unauthorized_secrets_access" {
+  name           = "UnauthorizedSecretsAccess"
   log_group_name = "/aws/cloudtrail/logs"
   
-  pattern = "{ $.errorCode = AccessDenied && $.eventSource = ssm.amazonaws.com }"
+  pattern = "{ $.errorCode = AccessDenied && $.eventSource = secretsmanager.amazonaws.com }"
   
   metric_transformation {
-    name      = "UnauthorizedSSMAccessCount"
+    name      = "UnauthorizedSecretsAccessCount"
     namespace = "Security"
     value     = "1"
   }
 }
 
-resource "aws_cloudwatch_metric_alarm" "unauthorized_ssm_alarm" {
-  alarm_name          = "unauthorized-ssm-access"
+resource "aws_cloudwatch_metric_alarm" "unauthorized_secrets_alarm" {
+  alarm_name          = "unauthorized-secrets-access"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = "1"
-  metric_name         = "UnauthorizedSSMAccessCount"
+  metric_name         = "UnauthorizedSecretsAccessCount"
   namespace           = "Security"
   period              = "300"
   statistic           = "Sum"
   threshold           = "5"
-  alarm_description   = "Alert on multiple unauthorized SSM access attempts"
+  alarm_description   = "Alert on multiple unauthorized Secrets Manager access attempts"
 }
 ```
 
 ### Audit Queries
 
 ```bash
-# List all SSM parameter access in last 24 hours
+# List all Secrets Manager secret access in last 24 hours
 aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=GetParameter \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=GetSecretValue \
   --start-time $(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S) \
   --max-results 100
 
 # Find all denied access attempts
 aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=GetParameter \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=GetSecretValue \
   --start-time $(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S) \
   --query 'Events[?ErrorCode==`AccessDenied`]'
 ```
@@ -656,8 +719,8 @@ resource "aws_iam_policy" "database_service_dev" {
   policy = jsonencode({
     Statement = [{
       Effect   = "Allow"
-      Action   = ["ssm:GetParameter*"]
-      Resource = "arn:aws:ssm:*:*:parameter/dev/database/*"
+      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+      Resource = "arn:aws:secretsmanager:*:*:secret:dev/database/*"
     }]
   })
 }
@@ -686,18 +749,19 @@ resource "aws_iam_role_policy_attachment" "database_task_policy" {
 
 ```bash
 # Copy existing environment configuration
-cp terraform/environments/dev/terraform.tfvars terraform/environments/qa/terraform.tfvars
+cp terraform/env-development/foundation-layer/iam-roles-terraform/terraform.tfvars terraform/env-qa/foundation-layer/iam-roles-terraform/terraform.tfvars
 
 # Update environment name
-sed -i 's/environment = "dev"/environment = "qa"/g' terraform/environments/qa/terraform.tfvars
+sed -i 's/environment = "dev"/environment = "qa"/g' terraform/env-qa/foundation-layer/iam-roles-terraform/terraform.tfvars
 
 # Apply - will create new role and policies
-terraform apply -var-file="environments/qa/terraform.tfvars"
+terraform apply -var-file="env-qa/foundation-layer/iam-roles-terraform/terraform.tfvars"
 ```
 
 ## Consequences
 
 ### Positive
+
 - ✅ **Strong security**: Environment isolation prevents cross-environment access
 - ✅ **No credentials**: OIDC eliminates long-lived secrets
 - ✅ **Clear audit trail**: Every access logged to CloudTrail
@@ -707,36 +771,44 @@ terraform apply -var-file="environments/qa/terraform.tfvars"
 - ✅ **Scalable**: Easy to extend
 
 ### Negative
+
 - ⚠️ **Multiple policies**: More complex than single policy
 - ⚠️ **Initial setup**: Requires OIDC provider configuration
 - ⚠️ **Policy maintenance**: Changes needed for new environments
 
 ### Neutral
+
 - ⚙️ **Learning required**: Need to understand IAM concepts
 - ⚙️ **Terraform complexity**: More resources to manage
 - ⚙️ **Testing overhead**: Policies should be tested
 
 ### Mitigations
+
 - **Complexity**: Terraform automates policy creation
 - **Setup**: One-time configuration, then reusable
 - **Maintenance**: Changes are infrastructure-as-code
 
 ## Related Decisions
+
 - **ADR-005**: Secret Management Solution Selection
 - **ADR-006**: KMS Key Management Strategy
 - **ADR-008**: Secret Rotation Implementation Patterns
 
 ## References
+
 - [AWS IAM Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
 - [GitHub Actions OIDC with AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - [IAM Roles for ECS Tasks](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html)
-- [Parameter Store IAM Permissions](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-access.html)
+- [Secrets Manager IAM Permissions](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html)
+- [Secrets Manager IAM Policy Examples](https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access_examples.html)
 - [AWS Security Audit Guidelines](https://docs.aws.amazon.com/audit-manager/latest/userguide/control-compliance.html)
 
 ## Review Schedule
+
 - **Initial Review**: After 1 month of operation
 - **Regular Review**: Quarterly
 - **Triggers for Review**:
+
   - New service additions
   - Team member changes
   - Security incidents
@@ -746,5 +818,4 @@ terraform apply -var-file="environments/qa/terraform.tfvars"
 ---
 
 **Date**: 2025-10-31  
-**Last Updated**: 2025-10-31  
-**Status**: Accepted  
+**Last Updated**: 2025-11-17 (Updated to reflect Secrets Manager instead of Parameter Store per ADR-005)  

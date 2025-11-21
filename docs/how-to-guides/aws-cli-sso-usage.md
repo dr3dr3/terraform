@@ -136,6 +136,11 @@ sso_registration_scopes = sso:account:access
 
 ## Daily Usage
 
+**List profile setup:**
+```bash
+aws configure list-profiles
+```
+
 **Authenticate once:**
 ```bash
 aws sso login --sso-session my-aws-sso

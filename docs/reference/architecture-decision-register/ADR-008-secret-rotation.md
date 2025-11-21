@@ -1,12 +1,15 @@
 # ADR-008: Secret Rotation Implementation Patterns
 
 ## Status
-Accepted
+
+Approved
 
 ## Context
-Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and IAM policies (ADR-007), we need to establish comprehensive secret rotation patterns. Unlike AWS Secrets Manager which provides automatic rotation for certain secret types, Parameter Store requires manual implementation of rotation logic. This presents both a challenge and a learning opportunity to understand rotation mechanics deeply.
+
+Following decisions on AWS Secrets Manager (ADR-005), KMS encryption (ADR-006), and IAM policies (ADR-007), we need to establish comprehensive secret rotation patterns. While AWS Secrets Manager provides automatic rotation for certain secret types (RDS, DocumentDB, Redshift), custom rotation logic is needed for other secret types (API keys, application secrets, certificates). Additionally, we need to clarify how rotated secrets integrate with Kubernetes deployments via External Secrets Operator (ESO) as defined in ADR-003 and ADR-004.
 
 ### Requirements
+
 - **Regular Rotation**: Secrets should be rotated periodically
 - **Zero Downtime**: Applications continue working during rotation
 - **Automation**: Minimize manual intervention
@@ -17,18 +20,25 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 - **Learning Value**: Understand rotation mechanics
 
 ### Current State
-- Parameter Store stores secrets but doesn't rotate them automatically
-- Manual rotation requires updating parameter and dependent services
-- No built-in coordination between secret update and service restart
-- Version history provides rollback capability (up to 100 versions)
+
+- Secrets Manager stores secrets with built-in rotation for AWS services (RDS, etc.)
+- Custom rotation needed for non-AWS secrets (API keys, application secrets)
+- External Secrets Operator (ESO) syncs secrets from Secrets Manager to Kubernetes
+- K8s applications consume secrets via native K8s Secret resources
+- Secret rotation must trigger ESO sync and application pod updates
+- Version history provides rollback capability (automatic versioning in Secrets Manager)
 
 ### Constraints
+
 - Learning lab budget (must be cost-effective)
 - Single operator (automation is valuable)
 - Various secret types with different rotation requirements
-- Some services may need restart after rotation
+- K8s applications consume secrets via External Secrets Operator
+- ESO refresh interval affects how quickly rotated secrets reach applications
+- Pod restart or volume remount may be needed for applications to pick up new secrets
 
 ## Decision Drivers
+
 1. **Security**: Reduce blast radius of compromised credentials
 2. **Automation**: Minimize manual intervention
 3. **Reliability**: Ensure applications continue working
@@ -40,23 +50,27 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 ## Options Considered
 
 ### Option 1: Manual Rotation (No Automation)
+
 **Description**: Operator manually updates secrets and restarts services as needed.
 
 **Process**:
+
 1. Generate new secret value
 2. Update parameter via AWS CLI
 3. Manually restart dependent services
 4. Update documentation
 
 **Pros**:
+
 - Simple to understand
 - No automation code needed
 - Zero cost
 - Full control over timing
 
 **Cons**:
+
 - **Error-prone**: Easy to forget steps
-- **Time-consuming**: Manual work every rotation
+- Time-consuming: Manual work every rotation
 - **Not scalable**: Doesn't work with many secrets
 - **Poor learning value**: Doesn't teach automation
 - **Not production-ready**: Companies automate this
@@ -65,16 +79,21 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 **Security Score**: ⚠️ 3/10 - Easy to skip rotations
 
 ### Option 2: Scheduled GitHub Actions Workflow
+
 **Description**: GitHub Actions workflow runs on schedule to rotate secrets automatically.
 
 **Process**:
+
 1. Workflow triggers on schedule (e.g., weekly)
 2. Python script generates new secret values
-3. Updates parameters via AWS API
-4. Optionally triggers service restarts
-5. Creates report/notification
+3. Updates Secrets Manager via AWS API
+4. External Secrets Operator detects change (polling interval: 1-15 minutes)
+5. ESO updates K8s Secret resources
+6. K8s applications pick up new secrets (via volume remount or pod restart)
+7. Creates rotation report/notification
 
 **Pros**:
+
 - **Free**: GitHub Actions free tier
 - Version controlled workflow
 - Audit trail in GitHub
@@ -84,6 +103,7 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 - Demonstrates CI/CD patterns
 
 **Cons**:
+
 - Requires GitHub Actions knowledge
 - Limited to GitHub ecosystem
 - No built-in error handling beyond workflow
@@ -93,16 +113,20 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 **Security Score**: ✅ 7/10 - Good automation
 
 ### Option 3: AWS Lambda with EventBridge
+
 **Description**: Lambda function triggered by EventBridge (CloudWatch Events) to rotate secrets.
 
 **Process**:
+
 1. EventBridge rule triggers Lambda on schedule
 2. Lambda generates new secrets
-3. Lambda updates parameters
-4. Lambda triggers service updates
-5. Lambda sends SNS notification
+3. Lambda updates Secrets Manager
+4. ESO detects change and updates K8s Secrets
+5. Lambda optionally triggers K8s deployment rollout
+6. Lambda sends SNS notification
 
 **Pros**:
+
 - Native AWS integration
 - Can trigger service-specific updates
 - SNS for notifications
@@ -111,6 +135,7 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 - Can respond to events
 
 **Cons**:
+
 - **Costs money**: Lambda invocations + EventBridge rules
 - More complex infrastructure
 - Requires Lambda knowledge
@@ -121,17 +146,21 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 **Security Score**: ✅ 8/10 - Enterprise pattern
 
 ### Option 4: Hybrid (GitHub Actions + Service-Specific Scripts)
+
 **Description**: GitHub Actions for scheduled rotation, service-specific scripts for coordination.
 
 **Process**:
+
 1. GitHub Actions triggers on schedule
 2. Calls service-specific rotation scripts
 3. Each script handles its secret type differently
-4. Database rotation: update password + update connection
+4. Database rotation: update password in DB + update Secrets Manager + ESO syncs to K8s
 5. API key rotation: dual-key pattern with grace period
-6. Application secret rotation: rolling restart
+6. K8s rotation: Update Secrets Manager + ESO sync + optional pod restart annotation
+7. Application secret rotation: rolling restart
 
 **Pros**:
+
 - **Flexible**: Different strategies per secret type
 - Free (GitHub Actions)
 - Reusable scripts
@@ -140,6 +169,7 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 - Production-ready patterns
 
 **Cons**:
+
 - Most complex implementation
 - Requires careful coordination
 - More code to maintain
@@ -149,14 +179,17 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 **Security Score**: ✅ 9/10 - Sophisticated
 
 ### Option 5: External Tools (HashiCorp Vault Rotation)
+
 **Description**: Use external rotation tools like Vault's rotation engines.
 
 **Pros**:
+
 - Battle-tested rotation logic
 - Professional-grade
 - Many integrations
 
 **Cons**:
+
 - **Requires running Vault**: Self-hosted (against requirements)
 - Or Vault Cloud (costs money)
 - Additional complexity
@@ -167,9 +200,10 @@ Following decisions on Parameter Store (ADR-005), KMS encryption (ADR-006), and 
 
 ## Decision
 
-**Selected Option: Option 4 - Hybrid GitHub Actions with Service-Specific Rotation Strategies**
+### Selected Option: Option 4 - Hybrid GitHub Actions with Service-Specific Rotation Strategies
 
 We will implement automated rotation using GitHub Actions with different rotation strategies for different secret types:
+
 1. **Simple Secrets**: Direct replacement (application secrets, JWT keys)
 2. **Database Credentials**: Coordinated update with connection refresh
 3. **API Keys**: Dual-key pattern with grace period
@@ -178,7 +212,9 @@ We will implement automated rotation using GitHub Actions with different rotatio
 ## Rationale
 
 ### Learning Value
+
 This approach provides deep understanding of:
+
 - How rotation actually works (not black box)
 - Different strategies for different secret types
 - Coordination challenges
@@ -186,29 +222,203 @@ This approach provides deep understanding of:
 - Error handling and rollback
 
 ### Cost Effective
+
 - GitHub Actions free tier (2,000 minutes/month)
 - No Lambda or EventBridge costs
 - No external service subscriptions
 - All code is open and maintainable
 
 ### Production Ready
+
 These patterns are used by real companies:
+
 - Netflix uses similar coordination patterns
 - Stripe uses dual-key rotation for API keys
 - Major SaaS companies use these strategies
 
 ### Flexibility
+
 Easy to extend:
+
 - Add new secret types
 - Customize rotation frequency
 - Implement additional notifications
 - Integrate with monitoring
+
+## External Secrets Operator Integration
+
+### Overview
+
+Per ADR-003 and ADR-004, Kubernetes applications consume secrets via External Secrets Operator (ESO), which synchronizes secrets from AWS Secrets Manager to native Kubernetes Secret resources. Secret rotation must account for this architecture:
+
+```text
+AWS Secrets Manager
+       ↓ (Rotated by GitHub Actions or AWS Lambda)
+       ↓
+External Secrets Operator (ESO)
+       ↓ (Polls every 1-15 minutes, configurable)
+       ↓
+Kubernetes Secret
+       ↓ (Mounted as volume or env var)
+       ↓
+Application Pod
+```
+
+### ESO Configuration for Rotation Support
+
+```yaml
+# ExternalSecret with automatic refresh
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: app-database-credentials
+  namespace: production
+spec:
+  refreshInterval: 5m  # Poll Secrets Manager every 5 minutes
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: app-db-secret
+    creationPolicy: Owner
+    deletionPolicy: Retain
+  data:
+  - secretKey: username
+    remoteRef:
+      key: prod/database/credentials
+      property: username
+  - secretKey: password
+    remoteRef:
+      key: prod/database/credentials
+      property: password
+```
+
+### Rotation Flow with ESO
+
+#### Step 1: Rotate Secret in Secrets Manager
+
+```python
+# GitHub Actions workflow rotates secret
+def rotate_database_password():
+    new_password = generate_secure_password(32)
+    
+    # Update database
+    update_database_user_password(new_password)
+    
+    # Update Secrets Manager
+    secretsmanager.put_secret_value(
+        SecretId='prod/database/credentials',
+        SecretString=json.dumps({
+            'username': 'app_user',
+            'password': new_password
+        })
+    )
+```
+
+#### Step 2: ESO Detects and Syncs (Automatic)
+
+- ESO polls Secrets Manager based on `refreshInterval`
+- Detects new secret version
+- Updates Kubernetes Secret resource
+- K8s Secret's `resourceVersion` changes
+
+#### Step 3: Application Picks Up New Secret**
+
+Applications can consume rotated secrets in three ways:
+
+#### Option A: Volume Mount with Automatic Refresh (Recommended)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        volumeMounts:
+        - name: secrets
+          mountPath: /secrets
+          readOnly: true
+      volumes:
+      - name: secrets
+        secret:
+          secretName: app-db-secret
+# Kubelet automatically updates mounted secrets (30-60 second delay)
+# Application must watch file for changes or re-read periodically
+```
+
+#### Option B: Environment Variables with Pod Restart (Simple)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  annotations:
+    # Reloader watches secrets and restarts pods
+    reloader.stakater.com/auto: "true"
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-db-secret
+              key: password
+# Requires Reloader or manual rollout restart
+```
+
+#### Option C: Forced Rollout Restart (Most Reliable)
+
+```bash
+# After rotation, force pod restart
+kubectl rollout restart deployment/app -n production
+```
+
+### Recommended Approach
+
+For zero-downtime rotation:
+
+1. **Use volume mounts** (not environment variables)
+2. **Configure application to re-read secrets periodically**
+3. **Set ESO refresh interval to 5-10 minutes**
+4. **Implement connection pool refresh** in application
+5. **Optional: Use Reloader operator** to automate pod restarts
+
+### Testing ESO Integration
+
+```bash
+# 1. Rotate secret in Secrets Manager
+aws secretsmanager put-secret-value \
+  --secret-id dev/test/rotation-test \
+  --secret-string "new-value-$(date +%s)"
+
+# 2. Watch ESO sync the secret
+kubectl get externalsecret app-test -n dev -w
+
+# 3. Verify K8s Secret updated
+kubectl get secret app-test-secret -n dev -o yaml
+
+# 4. Check ESO logs
+kubectl logs -n external-secrets-system \
+  deployment/external-secrets -f | grep app-test
+
+# 5. Verify application can access new secret
+kubectl exec -n dev deployment/app -- cat /secrets/password
+```
 
 ## Implementation Strategy
 
 ### Phase 1: Infrastructure Setup
 
 **GitHub Actions Workflow**:
+
 ```yaml
 name: Secret Rotation
 
@@ -273,7 +483,7 @@ import logging
 class SecretRotator:
     def __init__(self, environment: str, region: str = 'us-east-1'):
         self.environment = environment
-        self.ssm = boto3.client('ssm', region_name=region)
+        self.secretsmanager = boto3.client('secretsmanager', region_name=region)
         self.logger = logging.getLogger(__name__)
     
     def rotate_all(self):
@@ -292,13 +502,14 @@ class SecretRotator:
         
         for secret_name in secrets_to_rotate:
             new_value = self.generate_strong_secret(64)
-            self.update_parameter(secret_name, new_value)
+            self.update_secret(secret_name, new_value)
             self.logger.info(f"Rotated {secret_name}")
+            # ESO will automatically sync within refresh interval (5-10 min)
     
     def rotate_database_credentials(self):
         """Coordinated database credential rotation"""
         # Step 1: Get current password
-        current_password = self.get_parameter('database/password')
+        current_password = self.get_secret('database/password')
         
         # Step 2: Generate new password
         new_password = self.generate_strong_secret(32)
@@ -306,14 +517,17 @@ class SecretRotator:
         # Step 3: Update database user password
         self.update_database_password(new_password)
         
-        # Step 4: Update parameter
-        self.update_parameter('database/password', new_password)
+        # Step 4: Update Secrets Manager
+        self.update_secret('database/password', new_password)
         
-        # Step 5: Verify connectivity
+        # Step 5: Wait for ESO to sync (or force sync)
+        self.wait_for_eso_sync('database/password')
+        
+        # Step 6: Trigger K8s deployment rollout restart
+        self.trigger_k8s_rollout_restart('database')
+        
+        # Step 7: Verify connectivity
         self.verify_database_connection()
-        
-        # Step 6: Trigger application restart
-        self.trigger_service_restart('database')
     
     def rotate_api_keys(self):
         """Dual-key rotation for API keys"""
@@ -326,81 +540,146 @@ class SecretRotator:
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
         return ''.join(secrets.choice(alphabet) for _ in range(length))
     
-    def update_parameter(self, name: str, value: str):
-        """Update SSM parameter"""
-        full_name = f"/{self.environment}/{name}"
-        self.ssm.put_parameter(
-            Name=full_name,
-            Value=value,
-            Type='SecureString',
-            Overwrite=True,
-            Description=f"Rotated on {datetime.now().isoformat()}"
-        )
+    def update_secret(self, name: str, value: str):
+        """Update Secrets Manager secret"""
+        full_name = f"{self.environment}/{name}"
+        
+        try:
+            self.secretsmanager.put_secret_value(
+                SecretId=full_name,
+                SecretString=value
+            )
+            self.logger.info(f"Updated secret: {full_name}")
+        except self.secretsmanager.exceptions.ResourceNotFoundException:
+            # Create secret if it doesn't exist
+            self.secretsmanager.create_secret(
+                Name=full_name,
+                SecretString=value,
+                Description=f"Rotated on {datetime.now().isoformat()}"
+            )
+            self.logger.info(f"Created secret: {full_name}")
+    
+    def wait_for_eso_sync(self, secret_name: str, timeout: int = 600):
+        """Wait for ESO to sync the secret to K8s"""
+        # Poll K8s secret to verify ESO has synced
+        import subprocess
+        import time
+        
+        start_time = time.time()
+        full_name = f"{self.environment}/{secret_name}"
+        
+        # Get the secret's current version from Secrets Manager
+        response = self.secretsmanager.describe_secret(SecretId=full_name)
+        current_version = response['VersionIdsToStages']
+        current_version_id = [k for k, v in current_version.items() if 'AWSCURRENT' in v][0]
+        
+        while time.time() - start_time < timeout:
+            # Check if K8s secret has the new version
+            # This requires kubectl access or K8s API client
+            # Simplified version: just wait for ESO refresh interval
+            time.sleep(30)  # Wait 30 seconds for ESO to sync
+            self.logger.info(f"Waiting for ESO to sync {secret_name}...")
+            break  # In production, verify actual sync
+        
+        self.logger.info(f"ESO sync completed for {secret_name}")
+    
+    def trigger_k8s_rollout_restart(self, deployment_name: str):
+        """Trigger Kubernetes deployment rollout restart"""
+        import subprocess
+        
+        namespace = self.environment  # Assuming namespace matches environment
+        
+        result = subprocess.run([
+            'kubectl', 'rollout', 'restart',
+            f'deployment/{deployment_name}',
+            '-n', namespace
+        ], capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            self.logger.info(f"Triggered rollout restart for {deployment_name}")
+        else:
+            self.logger.error(f"Failed to restart {deployment_name}: {result.stderr}")
 ```
 
 ### Phase 3: Secret Type Specific Strategies
 
 #### Strategy A: Simple Application Secrets
+
 **Use Case**: JWT secrets, encryption keys, session secrets
 
 **Characteristics**:
+
 - Used internally by application
 - All instances can adopt immediately
 - No external coordination needed
 
 **Rotation Steps**:
+
 1. Generate new secret value
 2. Update parameter
 3. Restart application instances (rolling restart)
 4. Verify application health
 
 **Zero-Downtime Pattern**:
+
 ```python
 def rotate_application_secret(self, secret_name: str):
-    """Simple rotation with rolling restart"""
+    """Simple rotation with K8s rollout restart"""
     # 1. Generate new value
     new_value = self.generate_strong_secret(64)
     
-    # 2. Update parameter
-    self.update_parameter(secret_name, new_value)
+    # 2. Update Secrets Manager
+    self.update_secret(secret_name, new_value)
     
-    # 3. Rolling restart (assuming ECS)
-    # New tasks will pick up new secret
-    ecs = boto3.client('ecs')
-    ecs.update_service(
-        cluster='my-cluster',
-        service='my-service',
-        forceNewDeployment=True
-    )
+    # 3. Wait for ESO to sync (optional)
+    self.wait_for_eso_sync(secret_name)
     
-    # 4. Wait for deployment to complete
-    self.wait_for_deployment('my-service')
+    # 4. Rolling restart K8s deployment
+    # Pods will pick up new secret from updated K8s Secret
+    import subprocess
+    subprocess.run([
+        'kubectl', 'rollout', 'restart',
+        'deployment/my-service',
+        '-n', self.environment
+    ])
+    
+    # 5. Wait for rollout to complete
+    subprocess.run([
+        'kubectl', 'rollout', 'status',
+        'deployment/my-service',
+        '-n', self.environment
+    ])
 ```
 
 #### Strategy B: Database Credentials
+
 **Use Case**: RDS passwords, database user credentials
 
 **Characteristics**:
+
 - External system (database) needs updating
 - Application needs to reconnect
 - Coordination required
 
 **Rotation Steps**:
+
 1. Get current credentials
 2. Generate new password
 3. Update database user password first
-4. Update parameter
-5. Trigger connection pool refresh
-6. Verify connectivity
+4. Update Secrets Manager
+5. ESO syncs to K8s Secret (automatic)
+6. Trigger K8s deployment rollout restart
+7. Verify connectivity
 
 **Zero-Downtime Pattern**:
+
 ```python
 def rotate_database_credentials(self):
-    """Coordinated database rotation"""
+    """Coordinated database rotation with K8s integration"""
     # 1. Get database connection info
-    db_host = self.get_parameter('database/host')
-    db_user = self.get_parameter('database/username')
-    current_password = self.get_parameter('database/password')
+    db_host = self.get_secret('database/host')
+    db_user = self.get_secret('database/username')
+    current_password = self.get_secret('database/password')
     
     # 2. Generate new password
     new_password = self.generate_strong_secret(32)
@@ -420,14 +699,22 @@ def rotate_database_credentials(self):
     conn.commit()
     conn.close()
     
-    # 4. Update parameter
-    self.update_parameter('database/password', new_password)
+    # 4. Update Secrets Manager
+    self.update_secret('database/password', new_password)
     
-    # 5. Trigger application restart
-    # Applications will reconnect with new password
-    self.trigger_service_restart('api')
+    # 5. Wait for ESO to sync
+    self.wait_for_eso_sync('database/password')
     
-    # 6. Verify new credentials work
+    # 6. Trigger K8s deployment rollout restart
+    # Applications will reconnect with new password from updated K8s Secret
+    import subprocess
+    subprocess.run([
+        'kubectl', 'rollout', 'restart',
+        'deployment/api-service',
+        '-n', self.environment
+    ])
+    
+    # 7. Verify new credentials work
     test_conn = psycopg2.connect(
         host=db_host,
         user=db_user,
@@ -437,14 +724,17 @@ def rotate_database_credentials(self):
 ```
 
 #### Strategy C: API Keys (Dual-Key Pattern)
+
 **Use Case**: External API keys (OpenAI, Stripe, etc.)
 
 **Characteristics**:
+
 - Used by external services
 - Cannot force immediate adoption
 - Need grace period for transition
 
 **Rotation Steps**:
+
 1. Create new API key in external service
 2. Store as secondary key
 3. Grace period (both keys work)
@@ -453,6 +743,7 @@ def rotate_database_credentials(self):
 6. Delete old key after grace period
 
 **Zero-Downtime Pattern**:
+
 ```python
 def rotate_api_key_dual_pattern(self, service_name: str):
     """Dual-key rotation with grace period"""
@@ -495,14 +786,17 @@ def rotate_api_key_dual_pattern(self, service_name: str):
 ```
 
 #### Strategy D: Certificates
+
 **Use Case**: TLS certificates, SSL certs
 
 **Characteristics**:
+
 - Have expiration dates
 - Need renewal before expiry
 - Deployment can be complex
 
 **Rotation Steps**:
+
 1. Check cert expiration (rotate 30 days before)
 2. Generate new certificate
 3. Store new cert
@@ -767,7 +1061,7 @@ def backup_before_rotation(self, secret_names: List[str]) -> str:
     backup_data = {}
     
     for secret_name in secret_names:
-        value = self.get_parameter(secret_name)
+        value = self.get_secret(secret_name)
         backup_data[secret_name] = value
     
     # Save to S3
@@ -804,8 +1098,11 @@ python scripts/restore_secrets.py --backup /tmp/backup.json --environment dev
 # 4. Verify restoration
 ./scripts/secrets.sh validate -e dev
 
-# 5. Restart services
-python scripts/restart_services.py --environment dev
+# 5. Verify ESO has synced restored secrets to K8s
+kubectl get externalsecrets -n dev
+
+# 6. Trigger K8s deployment rollouts if needed
+kubectl rollout restart deployment/api-service -n dev
 ```
 
 ## Age-Based Rotation Check
@@ -816,24 +1113,22 @@ def check_secrets_age(self) -> List[str]:
     secrets_to_rotate = []
     max_age_days = 90
     
-    # Get all parameters
-    params = self.ssm.describe_parameters(
-        ParameterFilters=[
-            {
-                'Key': 'Name',
-                'Option': 'BeginsWith',
-                'Values': [f'/{self.environment}/']
-            }
-        ]
-    )
+    # Get all secrets from Secrets Manager
+    paginator = self.secretsmanager.get_paginator('list_secrets')
     
-    for param in params['Parameters']:
-        # Check last modified date
-        last_modified = param['LastModifiedDate']
-        age = (datetime.now(last_modified.tzinfo) - last_modified).days
-        
-        if age >= max_age_days:
-            secrets_to_rotate.append(param['Name'])
+    for page in paginator.paginate():
+        for secret in page['SecretList']:
+            # Filter by environment prefix
+            if not secret['Name'].startswith(f"{self.environment}/"):
+                continue
+            
+            # Check last changed date
+            last_changed = secret.get('LastChangedDate')
+            if last_changed:
+                age = (datetime.now(last_changed.tzinfo) - last_changed).days
+                
+                if age >= max_age_days:
+                    secrets_to_rotate.append(secret['Name'])
             self.logger.warning(
                 f"{param['Name']} is {age} days old (threshold: {max_age_days})"
             )
@@ -844,6 +1139,7 @@ def check_secrets_age(self) -> List[str]:
 ## Consequences
 
 ### Positive
+
 - ✅ **Automated**: Secrets rotate automatically
 - ✅ **Free**: Uses GitHub Actions free tier
 - ✅ **Flexible**: Different strategies per secret type
@@ -854,67 +1150,253 @@ def check_secrets_age(self) -> List[str]:
 - ✅ **Zero-Downtime**: Applications continue working
 
 ### Negative
+
 - ⚠️ **Complexity**: More code to maintain than AWS Secrets Manager auto-rotation
 - ⚠️ **Manual for Some**: API keys still require manual intervention
 - ⚠️ **Testing**: Need comprehensive test coverage
 - ⚠️ **Coordination**: Database rotation requires careful sequencing
+- ⚠️ **ESO Latency**: 5-15 minute delay between rotation and K8s Secret update
+- ⚠️ **Pod Restart Needed**: Some applications may require pod restart to pick up new secrets
 
 ### Neutral
+
 - ⚙️ **GitHub-Dependent**: Relies on GitHub Actions
-- ⚙️ **Learning Curve**: Need to understand each strategy
+- ⚙️ **Learning Curve**: Need to understand each strategy and ESO integration
 - ⚙️ **Service-Specific**: Some patterns need customization
+- ⚙️ **K8s Native**: Applications must support K8s secret consumption patterns
 
 ### Mitigations
+
 - **Complexity**: Well-documented code with examples
 - **Manual Work**: Clear procedures and checklists
 - **Testing**: Comprehensive test suite provided
 - **Coordination**: Detailed coordination patterns documented
+- **ESO Latency**: Reduce refresh interval to 5 minutes or use Reloader operator
+- **Pod Restart**: Use volume mounts + application file watching, or Reloader operator for automatic restarts
 
-## Migration to AWS Secrets Manager (Future)
+## Kubernetes-Specific Rotation Considerations
 
-If automatic rotation becomes a requirement:
+### ESO Refresh Interval Trade-offs
+
+| Refresh Interval | Pros | Cons | Best For |
+|------------------|------|------|----------|
+| 1 minute | Fast secret propagation | Higher AWS API costs, more K8s resource updates | Critical production secrets |
+| 5 minutes | Good balance | Slight delay in rotation | Recommended default |
+| 15 minutes | Lower API costs | Longer rotation delay | Non-critical dev/staging |
+| 1 hour | Minimal API costs | Significant rotation delay | Configuration values |
+
+### Application Secret Consumption Patterns
+
+#### Pattern 1: File-Based with Periodic Reload (Best for Rotation)
 
 ```python
-# 1. Create Secrets Manager secret
-aws secretsmanager create-secret \
-  --name /prod/database/password \
-  --secret-string "current_value" \
-  --kms-key-id <key-id>
+# Application code that re-reads secret file
+import time
+import os
 
-# 2. Set up rotation
-aws secretsmanager rotate-secret \
-  --secret-id /prod/database/password \
-  --rotation-lambda-arn <lambda-arn> \
-  --rotation-rules AutomaticallyAfterDays=30
+class SecretManager:
+    def __init__(self, secret_path='/secrets/db-password'):
+        self.secret_path = secret_path
+        self.last_mtime = 0
+        self.cached_secret = None
+    
+    def get_secret(self):
+        # Check if file has been modified
+        current_mtime = os.path.getmtime(self.secret_path)
+        
+        if current_mtime != self.last_mtime:
+            # File changed, reload secret
+            with open(self.secret_path) as f:
+                self.cached_secret = f.read().strip()
+            self.last_mtime = current_mtime
+        
+        return self.cached_secret
 
-# 3. Update application to use Secrets Manager API
-# 4. Migrate one environment at a time
-# 5. Decommission Parameter Store parameters
+# Database connection pool with refresh
+def refresh_connection_pool():
+    new_password = secret_manager.get_secret()
+    if new_password != current_password:
+        # Close old connections
+        pool.close_all()
+        # Create new pool with new password
+        pool = create_pool(new_password)
 ```
 
+#### Pattern 2: Reloader Operator (Easiest for Pod Restart)
+
+```yaml
+# Install Reloader
+helm repo add stakater https://stakater.github.io/stakater-charts
+helm install reloader stakater/reloader
+
+# Add annotation to deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  annotations:
+    reloader.stakater.com/auto: "true"
+    # Or watch specific secrets:
+    # reloader.stakater.com/search: "true"
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        volumeMounts:
+        - name: secrets
+          mountPath: /secrets
+      volumes:
+      - name: secrets
+        secret:
+          secretName: app-db-secret
+# Reloader watches secret and triggers rolling restart automatically
+```
+
+#### Pattern 3: Init Container for Critical Secrets
+
+```yaml
+# Verify secret exists before starting main container
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: verify-secrets
+        image: busybox
+        command: ['sh', '-c', 'test -f /secrets/password && echo "Secret verified"']
+        volumeMounts:
+        - name: secrets
+          mountPath: /secrets
+      containers:
+      - name: app
+        # ... main container
+```
+
+### Testing Rotation End-to-End
+
+```bash
+#!/bin/bash
+# test-rotation-e2e.sh
+
+set -e
+
+ENVIRONMENT="dev"
+SECRET_NAME="dev/test/rotation-e2e"
+NAMESPACE="dev"
+DEPLOYMENT="test-app"
+
+echo "1. Create initial secret in Secrets Manager"
+aws secretsmanager create-secret \
+  --name "$SECRET_NAME" \
+  --secret-string "initial-value-$(date +%s)"
+
+echo "2. Wait for ESO to sync (max 5 minutes)"
+for i in {1..30}; do
+  if kubectl get secret test-secret -n "$NAMESPACE" &>/dev/null; then
+    echo "Secret synced to K8s"
+    break
+  fi
+  sleep 10
+done
+
+echo "3. Verify initial value in K8s"
+INITIAL_VALUE=$(kubectl get secret test-secret -n "$NAMESPACE" -o jsonpath='{.data.value}' | base64 -d)
+echo "Initial value: $INITIAL_VALUE"
+
+echo "4. Rotate secret"
+NEW_VALUE="rotated-value-$(date +%s)"
+aws secretsmanager put-secret-value \
+  --secret-id "$SECRET_NAME" \
+  --secret-string "$NEW_VALUE"
+
+echo "5. Wait for ESO to detect rotation"
+for i in {1..30}; do
+  CURRENT_VALUE=$(kubectl get secret test-secret -n "$NAMESPACE" -o jsonpath='{.data.value}' | base64 -d)
+  if [ "$CURRENT_VALUE" == "$NEW_VALUE" ]; then
+    echo "Rotation detected and synced!"
+    break
+  fi
+  sleep 10
+done
+
+echo "6. Trigger pod restart"
+kubectl rollout restart deployment/"$DEPLOYMENT" -n "$NAMESPACE"
+
+echo "7. Wait for rollout"
+kubectl rollout status deployment/"$DEPLOYMENT" -n "$NAMESPACE"
+
+echo "8. Verify application uses new secret"
+kubectl exec -n "$NAMESPACE" deployment/"$DEPLOYMENT" -- cat /secrets/value
+
+echo "✅ End-to-end rotation test completed successfully"
+```
+
+## Migration to AWS Secrets Manager Native Rotation (Future)
+
+AWS Secrets Manager provides native rotation for certain secret types. If using RDS with Secrets Manager's built-in rotation:
+
+```bash
+# 1. Ensure secret is in Secrets Manager (already done per ADR-005)
+aws secretsmanager describe-secret --secret-id prod/database/credentials
+
+# 2. Set up automatic rotation for RDS
+aws secretsmanager rotate-secret \
+  --secret-id prod/database/credentials \
+  --rotation-lambda-arn arn:aws:lambda:REGION:ACCOUNT:function:SecretsManagerRDSPostgreSQLRotationSingleUser \
+  --rotation-rules AutomaticallyAfterDays=30
+
+# 3. ESO continues to work - just syncs rotated secrets automatically
+# No changes needed to ExternalSecret configuration
+
+# 4. Verify rotation works
+aws secretsmanager get-secret-value --secret-id prod/database/credentials
+
+# 5. Monitor ESO sync
+kubectl get externalsecrets -n production -w
+```
+
+**Benefits of Native Rotation:**
+
+- AWS manages rotation Lambda
+- Battle-tested rotation logic
+- Automatic rollback on failure
+- No custom code to maintain
+
+**ESO Integration:** External Secrets Operator continues to work seamlessly - it simply syncs the rotated secrets from Secrets Manager to K8s, regardless of whether rotation is manual or automatic.
+
 ## Related Decisions
-- **ADR-005**: Secret Management Solution Selection
+
+- **ADR-003**: Infrastructure Layering - Defines k8s-manifests repo and ArgoCD usage
+- **ADR-004**: Infrastructure Tooling Separation - Defines External Secrets Operator integration
+- **ADR-005**: Secret Management Solution Selection - Decision to use AWS Secrets Manager
 - **ADR-006**: KMS Key Management Strategy
-- **ADR-007**: IAM Policy Design
+- **ADR-007**: IAM Policy Design for Secrets Manager Access
 
 ## References
-- [AWS Secrets Rotation Best Practices](https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html)
+
+- [AWS Secrets Manager Rotation](https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html)
 - [Database Credential Rotation](https://aws.amazon.com/blogs/security/how-to-rotate-amazon-rds-database-credentials-with-aws-secrets-manager/)
+- [External Secrets Operator Documentation](https://external-secrets.io/)
+- [Kubernetes Secrets Management](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [Stakater Reloader](https://github.com/stakater/Reloader)
 - [API Key Rotation Patterns](https://stripe.com/docs/keys#api-key-rotation)
-- [Zero-Downtime Deployments](https://aws.amazon.com/blogs/compute/blue-green-deployments-with-amazon-ecs/)
-- [Parameter Store Version History](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-paramstore-versions.html)
+- [Zero-Downtime Deployments with Kubernetes](https://kubernetes.io/docs/tutorials/kubernetes-basics/update/update-intro/)
 
 ## Review Schedule
+
 - **Initial Review**: After first automated rotation
 - **Regular Review**: Monthly for first 3 months, then quarterly
 - **Triggers for Review**:
   - Rotation failures
   - Service outages during rotation
   - New service types requiring rotation
+  - ESO integration issues
   - Team feedback
 
 ---
- 
+
 **Date**: 2025-10-31  
-**Last Updated**: 2025-10-31  
-**Status**: Accepted  
+**Last Updated**: 2025-11-17 (Updated to clarify ESO integration and K8s deployment flow per ADR-003/004)  
+  

@@ -17,8 +17,6 @@
         "--network=host",
         "--privileged"
     ],
-    
-    "postCreateCommand": "gum style --foreground 003 --border-foreground 003 --border rounded --align center --width 50 --margin '1 2' --padding '2 4' 'André Dreyer' 'Terraform'",
 
     "customizations": {
         "vscode": {
@@ -30,7 +28,8 @@
                 "github.copilot",
                 "Anthropic.claude-code",
                 "hashicorp.terraform",
-                "hashicorp.hcl"
+                "hashicorp.hcl",
+                "DavidAnson.vscode-markdownlint"
             ],
             "settings": {
                 "editor.fontFamily": "FiraCode Nerd Font, monospace",

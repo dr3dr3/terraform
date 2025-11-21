@@ -52,3 +52,8 @@ terraform.rc
 # Ignore any local environment files
 .env
 .env.local
+
+# Ignore sensitive output files
+*.pem
+*.key
+kubeconfig*

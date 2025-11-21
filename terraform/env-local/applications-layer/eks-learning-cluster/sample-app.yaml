@@ -1,0 +1,128 @@
+---
+# Simple nginx deployment for testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-test
+  namespace: default
+  labels:
+    app: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# Service to expose nginx
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: default
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+
+---
+# ConfigMap for custom nginx config (optional)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: default
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>EKS Learning Cluster</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 50px auto;
+                padding: 20px;
+                background-color: #f0f0f0;
+            }
+            .container {
+                background-color: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            h1 {
+                color: #ff9900;
+            }
+            .info {
+                background-color: #e7f3ff;
+                padding: 15px;
+                border-left: 4px solid #2196F3;
+                margin: 20px 0;
+            }
+            .success {
+                background-color: #d4edda;
+                padding: 15px;
+                border-left: 4px solid #28a745;
+                margin: 20px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🎉 EKS Cluster is Running!</h1>
+            <div class="success">
+                <strong>Success!</strong> Your EKS cluster is up and running.
+            </div>
+            <div class="info">
+                <strong>Cluster Information:</strong><br>
+                • Region: ap-southeast-2 (Sydney)<br>
+                • Kubernetes Version: 1.31<br>
+                • Instance Type: Spot (t3a.medium/t3.medium)<br>
+                • Purpose: Learning & Experimentation
+            </div>
+            <h2>Next Steps:</h2>
+            <ul>
+                <li>Explore Kubernetes resources: <code>kubectl get all</code></li>
+                <li>Check node information: <code>kubectl get nodes -o wide</code></li>
+                <li>View pod logs: <code>kubectl logs deployment/nginx-test</code></li>
+                <li>Scale the deployment: <code>kubectl scale deployment nginx-test --replicas=3</code></li>
+            </ul>
+            <p><em>Remember to destroy resources when done to avoid costs!</em></p>
+        </div>
+    </body>
+    </html>
