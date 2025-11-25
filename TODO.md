@@ -7,7 +7,10 @@
   * Ready for AWS account creation and deployment
 * ⬜ - Create actual Sandbox AWS Account in organization
 * ⬜ - Deploy Sandbox foundation layer to actual AWS account
-* ⬜ - Setup and use cloud-nuke or aws-nuke to clean up resources in Sandbox (automate this?)
+* ☑️ - Setup and use cloud-nuke or aws-nuke to clean up resources in Sandbox (automate this?)
+  * ADR-012 created recommending Cloud Nuke with optional Lambda enhancement
+  * Implementation plan documented
+  * Ready for deployment once Sandbox AWS account is created
 
 ## Legend
 

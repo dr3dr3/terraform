@@ -11,12 +11,22 @@ Before creating "stacks" under environments and infrastructure layers, start wit
 
 ### Setup Steps
 
-1. Run `terraform login` and provide your TF Cloud User Token (under your Account Settings)
+1. **Install 1Password CLI** (for secure secret injection)
+   - Download from: [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
+   - Sign in: `op signin`
+
+2. **Inject Terraform Variables**
+   - Run `./scripts/inject-tfvars.sh` to populate `.tfvars` files from `.tfvars.example` templates
+   - This uses 1Password to inject secrets without committing them to git
+   - See [1Password tfvars injection guide](docs/how-to-guides/1password-tfvars-injection.md) for details
+
+3. **Terraform Cloud Authentication**
+   - Run `terraform login` and provide your TF Cloud User Token (under your Account Settings)
 
 ## Git Repositories
 
-* [Terraform Repository](https://github.com/dr3dr3/terraform) - Main repository with both Terraform code and documentation
-* [Terraform Module Repository](https://github.com/dr3dr3/terraform-modules) - Versioned (via tags) modules used in the above repository
+- [Terraform Repository](https://github.com/dr3dr3/terraform) - Main repository with both Terraform code and documentation
+- [Terraform Module Repository](https://github.com/dr3dr3/terraform-modules) - Versioned (via tags) modules used in the above repository
 
 ### Folder Structure - Terraform Repository
 
@@ -44,11 +54,11 @@ terraform/
 
 ### Git Branching
 
-* Trunk-Based Development
+- Trunk-Based Development
 
 ## CI/CD Pipeline
 
-* TBD
+- TBD
 
 ## Terraform Cloud
 
@@ -56,17 +66,17 @@ terraform/
 
 Mapped to environment and infrastructure layer, which aligns to the folder structure in the main Terraform repository.
 
-* Development - Applications
-* Development - Foundation
-* Development - Platform
-* Staging - Applications
-* Staging - Foundation
-* Staging - Platform
-* Production - Applications
-* Production - Foundation
-* Production - Platform
-* Management - Foundation
-* Management - Platform
+- Development - Applications
+- Development - Foundation
+- Development - Platform
+- Staging - Applications
+- Staging - Foundation
+- Staging - Platform
+- Production - Applications
+- Production - Foundation
+- Production - Platform
+- Management - Foundation
+- Management - Platform
 
 ### Terraform Workspaces
 

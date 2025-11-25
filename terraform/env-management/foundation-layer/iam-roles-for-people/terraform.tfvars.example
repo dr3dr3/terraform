@@ -1,0 +1,11 @@
+# Owner and cost center tags
+owner       = "your-name@example.com"
+cost_center = "engineering"
+
+# Optional: Add additional AWS account IDs to assign permission sets to
+# This allows the groups to access other accounts in your organization
+# additional_account_ids = [
+#   "111111111111",  # Dev account
+#   "222222222222",  # Staging account
+#   "333333333333",  # Production account
+# ]

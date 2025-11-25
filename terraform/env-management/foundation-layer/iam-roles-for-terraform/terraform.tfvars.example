@@ -1,0 +1,19 @@
+# Terraform Cloud Configuration
+tfc_organization = "YOUR_TFC_ORG_NAME" # Replace with your Terraform Cloud organization
+
+# Terraform Cloud Projects (if using projects feature)
+tfc_project_dev     = "development"
+tfc_project_staging = "staging"
+tfc_project_prod    = "production"
+
+# Terraform Cloud Workspaces
+tfc_workspace_dev_foundation     = "dev-foundation-layer"
+tfc_workspace_staging_foundation = "staging-foundation-layer"
+tfc_workspace_prod_foundation    = "prod-foundation-layer"
+
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Tags
+owner       = "your-name@example.com" # Replace with your email
+cost_center = "engineering"

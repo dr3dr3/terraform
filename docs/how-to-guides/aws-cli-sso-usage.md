@@ -11,11 +11,11 @@ aws --version
 # Should show something like: aws-cli/2.x.x
 ```
 
-If you need to install or upgrade: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
+If you need to install or upgrade: <https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html>
 
 ## Setup Process
 
-**1. Configure SSO Profile**
+### 1. Configure SSO Profile
 
 Run the configure command for your first account (let's start with dev):
 
@@ -25,7 +25,7 @@ aws configure sso
 
 You'll be prompted for:
 
-```
+```text
 SSO session name (Recommended): my-aws-sso
 SSO start URL [None]: https://d-xxxxxxxxxx.awsapps.com/start
 SSO region [None]: us-east-1
@@ -33,20 +33,21 @@ SSO registration scopes [sso:account:access]:
 ```
 
 **Key points:**
+
 - **SSO session name**: Pick something memorable (e.g., `my-aws-sso` or `personal-aws`)
 - **SSO start URL**: Your IAM Identity Center URL (found in the IAM Identity Center console)
 - **SSO region**: Region where you enabled IAM Identity Center (usually `us-east-1`)
 - **Registration scopes**: Just press Enter to accept default
 
-**2. Authenticate in Browser**
+### 2. Authenticate in Browser
 
 The CLI will open your browser to authenticate. Log in with your IAM Identity Center credentials.
 
-**3. Select Account and Role**
+### 3. Select Account and Role
 
 After authentication, the CLI will show your available accounts:
 
-```
+```text
 There are 3 AWS accounts available to you.
 > 123456789012 (dev-account)
   234567890123 (staging-account)
@@ -55,16 +56,16 @@ There are 3 AWS accounts available to you.
 
 Select your dev account, then choose the permission set (role):
 
-```
+```text
 Using the account ID 123456789012
 There are 2 roles available to you.
 > AdministratorAccess
   ReadOnlyAccess
 ```
 
-**4. Name Your Profile**
+### 4. Name Your Profile
 
-```
+```text
 CLI default client Region [None]: us-east-1
 CLI default output format [None]: json
 CLI profile name [AdministratorAccess-123456789012]: dev
@@ -137,11 +138,13 @@ sso_registration_scopes = sso:account:access
 ## Daily Usage
 
 **List profile setup:**
+
 ```bash
 aws configure list-profiles
 ```
 
 **Authenticate once:**
+
 ```bash
 aws sso login --sso-session my-aws-sso
 ```
@@ -149,6 +152,7 @@ aws sso login --sso-session my-aws-sso
 This logs you in to ALL accounts at once.
 
 **Use specific profiles:**
+
 ```bash
 # List S3 buckets in dev
 aws s3 ls --profile dev
@@ -163,6 +167,7 @@ aws ec2 describe-instances
 ```
 
 **Check current credentials:**
+
 ```bash
 aws sts get-caller-identity --profile dev
 ```
@@ -196,6 +201,7 @@ aws sso login --sso-session my-aws-sso
 ```
 
 **Check if session is valid:**
+
 ```bash
 aws sts get-caller-identity --profile dev
 ```
@@ -204,12 +210,14 @@ If you get an error, your session expired - just run the login command again.
 
 ## Troubleshooting
 
-**"Error loading SSO Token"**
+### "Error loading SSO Token"
+
 ```bash
 aws sso login --sso-session my-aws-sso
 ```
 
 **Want to reconfigure a profile?**
+
 ```bash
 # Edit directly
 nano ~/.aws/config
@@ -219,6 +227,7 @@ aws configure sso --profile dev
 ```
 
 **Clear cached credentials:**
+
 ```bash
 rm -rf ~/.aws/sso/cache/
 rm -rf ~/.aws/cli/cache/

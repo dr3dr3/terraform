@@ -1,15 +1,18 @@
 # Diataxis Framework Guide for Documentation
 
 ## Overview
+
 Diataxis is a systematic approach to organizing technical documentation around four fundamental user needs. Each type serves a distinct purpose and should be kept separate.
 
 ## The Four Documentation Types
 
 ### 1. **Tutorials** (Learning-oriented)
+
 **Purpose**: Teaching beginners through hands-on practice  
 **User need**: "I want to learn by doing"
 
 **Characteristics**:
+
 - Step-by-step lessons with a specific outcome
 - Reader is "on rails" - no decision-making required
 - Provides sample data, sandbox environments
@@ -22,10 +25,12 @@ Diataxis is a systematic approach to organizing technical documentation around f
 ---
 
 ### 2. **How-To Guides** (Task-oriented)
+
 **Purpose**: Solving specific real-world problems  
 **User need**: "I want to accomplish a specific goal"
 
 **Characteristics**:
+
 - Assumes reader is already competent with basics
 - Focused on practical application and problem-solving
 - Recipe-like format addressing specific scenarios
@@ -37,10 +42,12 @@ Diataxis is a systematic approach to organizing technical documentation around f
 ---
 
 ### 3. **Reference** (Information-oriented)
+
 **Purpose**: Providing technical facts for lookup  
 **User need**: "I need accurate information about something"
 
 **Characteristics**:
+
 - Dry, factual, and comprehensive
 - Neutral tone - no explanations or instructions
 - Structured like the product architecture itself
@@ -53,10 +60,12 @@ Diataxis is a systematic approach to organizing technical documentation around f
 ---
 
 ### 4. **Explanation** (Understanding-oriented)
+
 **Purpose**: Providing context and deepening understanding  
 **User need**: "I want to understand why and how things work"
 
 **Characteristics**:
+
 - Discusses concepts, design decisions, and trade-offs
 - Connects ideas and provides background
 - Answers "why" questions
@@ -69,7 +78,7 @@ Diataxis is a systematic approach to organizing technical documentation around f
 
 ## The Diataxis Map
 
-```
+```text
                 PRACTICAL
                     |
         TUTORIALS   |   HOW-TO GUIDES
@@ -88,7 +97,8 @@ STUDY ----------------------------- WORK
 ## Organization Rules
 
 ### Directory Structure
-```
+
+```text
 docs/
 ├── tutorials/
 ├── how-to-guides/

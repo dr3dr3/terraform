@@ -12,7 +12,7 @@ You can now run Terraform directly from your terminal using your AWS SSO credent
 
 ### Daily Workflow
 
-**1. Authenticate with AWS SSO (once per session)**
+#### 1. Authenticate with AWS SSO (once per session)
 
 ```fish
 aws sso login --profile Admin-Dev
@@ -20,7 +20,7 @@ aws sso login --profile Admin-Dev
 
 This logs you into AWS and your session will last 8-12 hours.
 
-**2. Set your AWS profile for Terraform**
+#### 2. Set your AWS profile for Terraform
 
 ```fish
 # In fish shell
@@ -30,7 +30,7 @@ set -x AWS_PROFILE Admin-Dev
 env AWS_PROFILE=Admin-Dev terraform plan
 ```
 
-**3. Run Terraform commands**
+#### 3. Run Terraform commands
 
 ```fish
 cd /workspace/terraform/env-development/applications-layer/eks-learning-cluster
@@ -58,11 +58,13 @@ Your current setup:
 The ADR describes **two types of access**:
 
 ### 1. Human Terminal Access (What you're using now)
+
 - Uses AWS SSO directly via `Admin-Dev` profile
 - No OIDC roles required
 - Best for development and testing
 
 ### 2. CI/CD Pipeline Access (Not set up yet)
+
 - Uses OIDC roles like `terraform-development-foundation-cicd-role`
 - Requires GitHub Actions OIDC provider configured
 - Enables GitHub Actions to deploy infrastructure automatically
@@ -74,6 +76,7 @@ The ADR describes **two types of access**:
 Currently using **local state** (terraform.tfstate file) for simplicity. The code has placeholders for Terraform Cloud which you can enable later.
 
 To switch to Terraform Cloud:
+
 1. Create workspace in Terraform Cloud organization "Datafaced"
 2. Uncomment the `cloud` block in your Terraform configuration
 3. Run `terraform init -migrate-state`
@@ -92,11 +95,13 @@ env AWS_PROFILE=Admin-Dev aws sts get-caller-identity
 ## Troubleshooting
 
 **Session expired error?**
+
 ```fish
 aws sso login --profile Admin-Dev
 ```
 
 **Terraform can't find credentials?**
+
 ```fish
 # Make sure AWS_PROFILE is set
 echo $AWS_PROFILE
@@ -118,6 +123,7 @@ set -x AWS_PROFILE Admin-Staging  # When that exists
 ✅ **You can now run Terraform from your terminal!**
 
 The setup is:
+
 - `aws sso login --profile Admin-Dev` (authenticate)
 - `set -x AWS_PROFILE Admin-Dev` (set profile)
 - `terraform plan/apply` (run Terraform)

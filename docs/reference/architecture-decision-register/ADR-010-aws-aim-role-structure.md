@@ -279,5 +279,5 @@ Where `{context}` is either `cicd` or `human`.
 **Revision History:**
 
 | Version | Date | Author | Changes |
-|---------|------|--------|---------||
+|---------|------|--------|---------|
 | 1.0 | 2025-11-02 | Andre Dreyer | Initial version |

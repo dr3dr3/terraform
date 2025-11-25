@@ -6,32 +6,37 @@ Instead of creating separate IAM users in each account, you create one identity 
 
 ## Setup Steps
 
-**1. Enable AWS Organizations** (if you haven't already)
+### 1. Enable AWS Organizations (if you haven't already)
+
 - Go to AWS Organizations in your management account
 - Click "Create organization"
 - Invite or create your dev, staging, and prod accounts under it
 
-**2. Enable IAM Identity Center**
+### 2. Enable IAM Identity Center
+
 - In the management account, go to IAM Identity Center
 - Click "Enable"
 - Choose your identity source - for just yourself, use the default "Identity Center directory" (built-in)
 - AWS will assign you a sign-in URL
 
-**3. Create Your User**
+### 3. Create Your User
+
 - In IAM Identity Center, go to Users
 - Click "Add user"
 - Enter your email, first/last name
 - You'll receive an email to set your password
 - Enable MFA for this user (highly recommended)
 
-**4. Create Permission Sets**
+### 4. Create Permission Sets
+
 - These are like IAM roles that define what you can do
 - Go to "Permission sets" and create a few:
   - `AdministratorAccess` - full admin (for learning/dev work)
   - `ReadOnlyAccess` - view-only (if you want to practice least privilege)
 - You can use AWS managed policies or create custom ones
 
-**5. Assign Access**
+### 5. Assign Access
+
 - Go to "AWS accounts" in IAM Identity Center
 - Select an account (e.g., dev)
 - Click "Assign users or groups"
@@ -54,6 +59,7 @@ When you click "Command line or programmatic access" for an account, you'll see 
 **Option 1: Manual credentials** (copy/paste environment variables)
 
 **Option 2: AWS CLI v2** (recommended)
+
 ```bash
 # Configure your profile
 aws configure sso

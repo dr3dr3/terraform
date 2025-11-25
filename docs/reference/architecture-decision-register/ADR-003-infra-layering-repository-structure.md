@@ -27,7 +27,7 @@ As our infrastructure grows, we need to make strategic decisions about how to or
    - Changes moderately (days/weeks) for scaling
    - Code deployments happen frequently (daily/hourly) without infrastructure changes
 
-3. **Management/Platform Infrastructure**
+3. **Platform/Management Infrastructure**
    - CI/CD infrastructure
    - Monitoring and logging (CloudWatch, Datadog)
    - Backup and disaster recovery
@@ -506,8 +506,8 @@ Infrastructure can be decoupled by change frequency. In your case:
 
 Services can reference shared infrastructure:
 
-```hcl
-# In terraform-infrastructure/layers/04-applications/service-a/environments/dev/main.tf
+```bash
+# In terraform repository: /env-development/foundations-layer/service-a/main.tf
 
 # Get foundation layer outputs
 data "terraform_remote_state" "foundation" {
@@ -616,7 +616,7 @@ terraform/
 
 #### Step 2: Configure Terraform Cloud Workspaces
 
-Create workspaces for each layer × environment:
+Create workspaces for each environment x layer:
 
 ```bash
 # Management Environment - Foundation Layer
@@ -631,28 +631,23 @@ aws-dev-app-service-a        (working-dir: env-development/applications-layer/se
 aws-dev-app-service-b        (working-dir: env-development/applications-layer/service-b)
 
 # Staging Environment
-aws-staging-foundation-iam   (working-dir: env-staging/foundation-layer/iam-roles-terraform)
-aws-staging-platform         (working-dir: env-staging/platform-layer)
-aws-staging-shared-services  (working-dir: env-staging/shared-services-layer)
-aws-staging-app-service-a    (working-dir: env-staging/applications-layer/service-a)
+aws-stg-foundation-iam   (working-dir: env-staging/foundation-layer/iam-roles-terraform)
+aws-stg-platform         (working-dir: env-staging/platform-layer)
+aws-stg-shared-services  (working-dir: env-staging/shared-services-layer)
+aws-stg-app-service-a    (working-dir: env-staging/applications-layer/service-a)
 
 # Production Environment
-aws-prod-foundation-iam      (working-dir: env-production/foundation-layer/iam-roles-terraform)
-aws-prod-platform            (working-dir: env-production/platform-layer)
-aws-prod-shared-services     (working-dir: env-production/shared-services-layer)
-aws-prod-app-service-a       (working-dir: env-production/applications-layer/service-a)
+aws-prd-foundation-iam      (working-dir: env-production/foundation-layer/iam-roles-terraform)
+aws-prd-platform            (working-dir: env-production/platform-layer)
+aws-prd-shared-services     (working-dir: env-production/shared-services-layer)
+aws-prd-app-service-a       (working-dir: env-production/applications-layer/service-a)
 ```
 
-### Phase 2: Layer 01 - Foundation (Week 2)
-
-#### Deploy Foundation Infrastructure
-
-```hcl
 ### Phase 2: Foundation Layer (Week 2)
 
 #### Deploy Foundation Infrastructure
 
-```hcl
+```bash
 # env-development/foundation-layer/iam-roles-terraform/main.tf
 terraform {
   required_version = "~> 1.6.0"
@@ -692,7 +687,7 @@ output "public_subnet_ids" {
 
 #### Deploy Platform Infrastructure
 
-```hcl
+```bash
 # env-development/platform-layer/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
@@ -721,7 +716,7 @@ module "monitoring" {
 
 #### Deploy Shared Services
 
-```hcl
+```bash
 # env-development/shared-services-layer/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
@@ -761,7 +756,7 @@ output "redis_endpoint" {
 
 #### Deploy Application Infrastructure (NOT code)
 
-```hcl
+```bash
 # env-development/applications-layer/service-a/main.tf
 data "terraform_remote_state" "foundation" {
   backend = "remote"
@@ -939,7 +934,7 @@ git push
 
 #### Option B: Auto-Scaling (Preferred)
 
-```hcl
+```bash
 # Set up Horizontal Pod Autoscaler in Terraform
 resource "kubernetes_horizontal_pod_autoscaler_v2" "app_hpa" {
   metadata {
@@ -1030,7 +1025,7 @@ git commit -m "feat: add new subnet for expansion"
 
 ### Scenario: Service A Depends on Service B
 
-```hcl
+```bash
 # env-development/applications-layer/service-a/main.tf
 
 # Get Service B's outputs
@@ -1058,13 +1053,13 @@ module "application" {
 
 ## Layer Dependency Flow
 
-```text
+```bash
 ┌─────────────────────────────────────────────────────────────────┐
 │ Foundation Layer (VPC, Networking, IAM)                         │
 │ Path: env-{environment}/foundation-layer/                       │
 │ State: aws-{env}-foundation-iam                                 │
 │ Changes: Rarely (quarterly)                                     │
-│ Outputs: vpc_id, subnet_ids, security_group_ids                │
+│ Outputs: vpc_id, subnet_ids, security_group_ids                 │
 └─────────────────────────────────────────────────────────────────┘
                                 │
                     ┌───────────┴───────────┐
@@ -1084,7 +1079,7 @@ module "application" {
 ┌─────────────────────────────────────────────────────────────────┐
 │ Applications Layer (Service A, B, C, ...)                       │
 │ Path: env-{environment}/applications-layer/{service-name}/      │
-│ States: aws-{env}-app-service-a, aws-{env}-app-service-b, ...  │
+│ States: aws-{env}-app-service-a, aws-{env}-app-service-b, ...   │
 │ Changes: Weekly (for scaling/config)                            │
 │ Depends on: Foundation, Platform, Shared Services, Other Apps   │
 └─────────────────────────────────────────────────────────────────┘
@@ -1176,7 +1171,7 @@ kubectl scale deployment service-a --replicas=10 -n production
 
 ### Auto-Scaling (Recommended)
 
-```hcl
+```bash
 # Define in Terraform, runs automatically
 resource "kubernetes_horizontal_pod_autoscaler_v2" "app" {
   metadata {
@@ -1227,7 +1222,7 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "app" {
 
 ### Scheduled Scaling
 
-```hcl
+```bash
 # Scale up during business hours
 resource "aws_appautoscaling_scheduled_action" "scale_up" {
   name               = "scale-up-business-hours"
@@ -1269,8 +1264,8 @@ This decision should be reviewed in 6 months (April 2026) or when:
 - [Terraform Monorepo vs Multi-repo (HashiCorp)](https://www.hashicorp.com/en/blog/terraform-mono-repo-vs-multi-repo-the-great-debate)
 - [Terraform Layered Architecture (Terrateam)](https://terrateam.io/blog/terraform-deployment-with-layered-architecture)
 - [Spacelift Terraform Monorepo Guide](https://spacelift.io/blog/terraform-monorepo)
-- ADR-001: Terraform State Management Backend
-- ADR-002: Terraform Workflow - Git Branching, CI/CD, and Terraform Cloud Setup
+- [ADR-001](./ADR-001-terraform-state-management.md): Terraform State Management Backend
+- [ADR-002](./ADR-002-terraform-workflow-git-cicd.md): Terraform Workflow - Git Branching, CI/CD, and Terraform Cloud Setup
 
 ---
 

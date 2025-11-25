@@ -1,0 +1,25 @@
+# Terraform Cloud Organization
+tfc_organization = "Datafaced"
+
+# GitHub VCS Integration
+# Get this from Terraform Cloud UI: Settings -> Version Control -> OAuth Clients
+# After connecting GitHub, copy the OAuth Token ID
+# OPTION 1: Use 1Password CLI injection (recommended for sensitive values)
+# github_oauth_token_id = "op://Terraform/Terraform Cloud - Management/github_oauth_token_id"
+# OPTION 2: Paste value directly (will be gitignored but less secure)
+github_oauth_token_id = "ot-XXXXXXXXXXXXXX"
+
+# GitHub Repository
+github_repository_identifier = "dr3dr3/terraform"
+
+# VCS Branch
+vcs_branch = "main"
+
+# Tags
+owner       = "Platform-Team"
+cost_center = "Infrastructure"
+
+# Auto-Apply Settings
+auto_apply_dev        = true   # Auto-apply changes in dev environment
+auto_apply_sandbox    = true   # Auto-apply changes in sandbox environment
+auto_apply_management = false  # Manual approval required for management account

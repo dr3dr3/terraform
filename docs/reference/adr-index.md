@@ -2,7 +2,7 @@
 
 > Quick reference for all Architecture Decision Records. Read the full ADR for complete context.
 
-**Last Updated**: November 17, 2025
+**Last Updated**: November 24, 2025
 
 ---
 
@@ -21,6 +21,7 @@
 | [ADR-009](./architecture-decision-register/ADR-009-folder-structure.md) | Terraform Folder Structure Organization | Environments → Layers → Stacks pattern | Approved | 2025-11-02 |
 | [ADR-010](./architecture-decision-register/ADR-010-aws-aim-role-structure.md) | AWS IAM Role Structure for Terraform OIDC Authentication | Tiered IAM role structure based on environment separation | Approved | 2025-11-02 |
 | [ADR-011](./architecture-decision-register/ADR-011-sandbox-environment.md) | Sandbox Environment for Testing and Experimentation | Dedicated AWS account with standard layers + experiments layer | Approved | 2025-11-17 |
+| [ADR-012](./architecture-decision-register/ADR-012-sandbox-automated-cleanup.md) | Automated Resource Cleanup for Sandbox Environment | Hybrid: Terraform Destroy + AWS Nuke v3 | Proposed | 2024-11-24 |
 
 ## Superseded Decisions
 
