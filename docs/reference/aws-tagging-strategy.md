@@ -22,7 +22,7 @@ tags = {
 - **Environment**: AWS account/environment name
 - **ManagedBy**: Always `Terraform` for IaC-managed resources
 - **Layer**: Infrastructure layer (see ADR-003)
-- **Owner**: Team or individual responsible for the resource
+- **Owner**: Team or individual responsible for the resource. Default to "Platform-Team".
 
 ## Sandbox Environment Tags
 

@@ -29,8 +29,7 @@
                 "Anthropic.claude-code",
                 "hashicorp.terraform",
                 "hashicorp.hcl",
-                "DavidAnson.vscode-markdownlint",
-                "1Password.op-vscode"
+                "DavidAnson.vscode-markdownlint"
             ],
             "settings": {
                 "editor.fontFamily": "FiraCode Nerd Font, monospace",

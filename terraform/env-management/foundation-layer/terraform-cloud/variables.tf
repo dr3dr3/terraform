@@ -25,13 +25,25 @@ variable "vcs_branch" {
 variable "owner" {
   description = "Owner tag for resources"
   type        = string
-  default     = "Platform-Team"
+  default     = "platform-team"
 }
 
-variable "cost_center" {
-  description = "Cost center tag for resources"
+variable "environment" {
+  description = "Environment tag for resources"
   type        = string
-  default     = "Infrastructure"
+  default     = "management"
+}
+
+variable "managed_by" {
+  description = "Managed-by tag for resources"
+  type        = string
+  default     = "terraform-cloud"
+}
+
+variable "layer" {
+  description = "Layer tag for resources"
+  type        = string
+  default     = "foundation"
 }
 
 variable "auto_apply_dev" {

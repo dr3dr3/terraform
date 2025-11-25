@@ -10,6 +10,19 @@
 
 set -euo pipefail
 
+# Get script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Load .env file if it exists and OP_SERVICE_ACCOUNT_TOKEN is not already set
+if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$PROJECT_ROOT/.env" ]; then
+    # Export variables from .env file (only lines with = that aren't comments)
+    set -a
+    # shellcheck source=/dev/null
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -44,9 +57,24 @@ check_op_cli() {
         exit 1
     fi
 
+    # Check for service account token first (CI/CD and automation scenarios)
+    if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+        # Verify service account works by trying to list vaults
+        if op vault list --format=json &> /dev/null; then
+            echo -e "${GREEN}✓ 1Password CLI authenticated via service account${NC}"
+            return 0
+        else
+            echo -e "${RED}Error: OP_SERVICE_ACCOUNT_TOKEN is set but authentication failed${NC}"
+            echo "Check that your service account token is valid and has access to the required vaults"
+            exit 1
+        fi
+    fi
+
+    # Fall back to interactive account check
     if ! op account list &> /dev/null; then
         echo -e "${RED}Error: Not signed in to 1Password${NC}"
         echo "Run: op signin"
+        echo "Or set OP_SERVICE_ACCOUNT_TOKEN for automation"
         exit 1
     fi
 
@@ -87,11 +115,19 @@ inject_file() {
             echo "  No 1Password references found - would copy as-is"
         fi
     else
-        if op inject -i "$example_file" -o "$tfvars_file" 2>/dev/null; then
-            echo -e "${GREEN}  ✓ Created: $tfvars_file${NC}"
+        # Check if file has 1Password references
+        if grep -q "op://" "$example_file" 2>/dev/null; then
+            # Try to inject secrets
+            local inject_output
+            if inject_output=$(op inject -i "$example_file" -o "$tfvars_file" 2>&1); then
+                echo -e "${GREEN}  ✓ Created: $tfvars_file (secrets injected)${NC}"
+            else
+                echo -e "${RED}  ✗ Failed to inject secrets into: $tfvars_file${NC}"
+                echo -e "${RED}    Error: $inject_output${NC}"
+                return 1
+            fi
         else
-            # If op inject fails, it might be because there are no secret references
-            # Just copy the file in that case
+            # No secret references, just copy
             cp "$example_file" "$tfvars_file"
             echo -e "${GREEN}  ✓ Copied: $tfvars_file (no secrets to inject)${NC}"
         fi
@@ -112,11 +148,11 @@ main() {
     local file_count=0
     while IFS= read -r example_file; do
         inject_file "$example_file"
-        ((file_count++))
+        file_count=$((file_count + 1))
     done < <(find terraform -name "terraform.tfvars.example" 2>/dev/null)
     
     if [ $file_count -eq 0 ]; then
-        echo -e "${YELLOW}No terraform.tfvars.example files found${NC}"
+        echo -e "${YELLOW}No terraform.tfvars.tpl files found${NC}"
         exit 0
     fi
     

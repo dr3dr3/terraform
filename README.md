@@ -11,6 +11,14 @@ Before creating "stacks" under environments and infrastructure layers, start wit
 
 ### Setup Steps
 
+**Set Environment Variable for 1Password** (for the OP CLI)
+
+```bash
+for line in (grep -v '^#' .env | grep -v '^$')
+    set -gx (string split -m 1 '=' $line)
+end
+```
+
 1. **Install 1Password CLI** (for secure secret injection)
    - Download from: [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
    - Sign in: `op signin`

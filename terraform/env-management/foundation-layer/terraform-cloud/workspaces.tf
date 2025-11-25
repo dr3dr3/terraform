@@ -16,7 +16,7 @@ resource "tfe_workspace" "management_foundation_iam_people" {
   }
 
   working_directory = "terraform/env-management/foundation-layer/iam-roles-for-people"
-  terraform_version = "~> 1.13.0"
+  terraform_version = "~> 1.14.0"
   auto_apply        = var.auto_apply_management
 
   tag_names = [
@@ -40,7 +40,7 @@ resource "tfe_workspace" "management_foundation_iam_terraform" {
   }
 
   working_directory = "terraform/env-management/foundation-layer/iam-roles-for-terraform"
-  terraform_version = "~> 1.13.0"
+  terraform_version = "~> 1.14.0"
   auto_apply        = var.auto_apply_management
 
   tag_names = [
@@ -64,7 +64,7 @@ resource "tfe_workspace" "management_foundation_terraform_cloud" {
   }
 
   working_directory = "terraform/env-management/foundation-layer/terraform-cloud"
-  terraform_version = "~> 1.13.0"
+  terraform_version = "~> 1.14.0"
   auto_apply        = false # Always require manual approval for meta-terraform
 
   tag_names = [
@@ -79,111 +79,78 @@ resource "tfe_workspace" "management_foundation_terraform_cloud" {
 ################################################################################
 
 # Development - Foundation Layer - IAM Roles for Terraform
-resource "tfe_workspace" "dev_foundation_iam_terraform" {
-  name         = "development-foundation-iam-roles-terraform"
-  organization = data.tfe_organization.main.name
-  project_id   = tfe_project.aws_development.id
-  description  = "IAM roles for Terraform Cloud in development account"
+# resource "tfe_workspace" "dev_foundation_iam_terraform" {
+#   name         = "development-foundation-iam-roles-terraform"
+#   organization = data.tfe_organization.main.name
+#   project_id   = tfe_project.aws_development.id
+#   description  = "IAM roles for Terraform Cloud in development account"
 
-  vcs_repo {
-    identifier     = local.vcs_repo.identifier
-    oauth_token_id = local.vcs_repo.oauth_token_id
-    branch         = local.vcs_repo.branch
-  }
+#   vcs_repo {
+#     identifier     = local.vcs_repo.identifier
+#     oauth_token_id = local.vcs_repo.oauth_token_id
+#     branch         = local.vcs_repo.branch
+#   }
 
-  working_directory = "terraform/env-development/foundation-layer/iam-roles-terraform"
-  terraform_version = "~> 1.13.0"
-  auto_apply        = var.auto_apply_dev
+#   working_directory = "terraform/env-development/foundation-layer/iam-roles-terraform"
+#   terraform_version = "~> 1.13.0"
+#   auto_apply        = var.auto_apply_dev
 
-  tag_names = [
-    "environment:development",
-    "layer:foundation",
-    "aws-account:development"
-  ]
-}
+#   tag_names = [
+#     "environment:development",
+#     "layer:foundation",
+#     "aws-account:development"
+#   ]
+# }
 
 # Development - Applications Layer - EKS Learning Cluster
-resource "tfe_workspace" "dev_applications_eks_learning" {
-  name         = "development-applications-eks-learning-cluster"
-  organization = data.tfe_organization.main.name
-  project_id   = tfe_project.aws_development.id
-  description  = "EKS learning cluster in development environment"
+# resource "tfe_workspace" "dev_applications_eks_learning" {
+#   name         = "development-applications-eks-learning-cluster"
+#   organization = data.tfe_organization.main.name
+#   project_id   = tfe_project.aws_development.id
+#   description  = "EKS learning cluster in development environment"
 
-  vcs_repo {
-    identifier     = local.vcs_repo.identifier
-    oauth_token_id = local.vcs_repo.oauth_token_id
-    branch         = local.vcs_repo.branch
-  }
+#   vcs_repo {
+#     identifier     = local.vcs_repo.identifier
+#     oauth_token_id = local.vcs_repo.oauth_token_id
+#     branch         = local.vcs_repo.branch
+#   }
 
-  working_directory = "terraform/env-development/applications-layer/eks-learning-cluster"
-  terraform_version = "~> 1.13.0"
-  auto_apply        = var.auto_apply_dev
+#   working_directory = "terraform/env-development/applications-layer/eks-learning-cluster"
+#   terraform_version = "~> 1.13.0"
+#   auto_apply        = var.auto_apply_dev
 
-  tag_names = [
-    "environment:development",
-    "layer:applications",
-    "service:eks",
-    "aws-account:development"
-  ]
-}
+#   tag_names = [
+#     "environment:development",
+#     "layer:applications",
+#     "service:eks",
+#     "aws-account:development"
+#   ]
+# }
 
 ################################################################################
 # Sandbox Environment Workspaces
 ################################################################################
 
 # Sandbox - Foundation Layer - IAM Roles for Terraform
-resource "tfe_workspace" "sandbox_foundation_iam_terraform" {
-  name         = "sandbox-foundation-iam-roles-terraform"
-  organization = data.tfe_organization.main.name
-  project_id   = tfe_project.aws_sandbox.id
-  description  = "IAM roles for Terraform Cloud in sandbox account"
-
-  vcs_repo {
-    identifier     = local.vcs_repo.identifier
-    oauth_token_id = local.vcs_repo.oauth_token_id
-    branch         = local.vcs_repo.branch
-  }
-
-  working_directory = "terraform/env-sandbox/foundation-layer/iam-roles-terraform"
-  terraform_version = "~> 1.13.0"
-  auto_apply        = var.auto_apply_sandbox
-
-  tag_names = [
-    "environment:sandbox",
-    "layer:foundation",
-    "aws-account:sandbox"
-  ]
-}
-
-################################################################################
-# Local Development Workspaces (LocalStack)
-################################################################################
-
-# Note: Local development workspaces using LocalStack typically don't need
-# Terraform Cloud workspaces as they use local state files.
-# These are included for reference but can be managed manually if needed.
-
-# Uncomment if you want to track local development state in Terraform Cloud
-# resource "tfe_workspace" "local_applications_eks_learning" {
-#   name         = "local-applications-eks-learning-cluster"
+# resource "tfe_workspace" "sandbox_foundation_iam_terraform" {
+#   name         = "sandbox-foundation-iam-roles-terraform"
 #   organization = data.tfe_organization.main.name
-#   project_id   = tfe_project.local_development.id
-#   description  = "EKS learning cluster using LocalStack"
-#
+#   project_id   = tfe_project.aws_sandbox.id
+#   description  = "IAM roles for Terraform Cloud in sandbox account"
+
 #   vcs_repo {
 #     identifier     = local.vcs_repo.identifier
 #     oauth_token_id = local.vcs_repo.oauth_token_id
 #     branch         = local.vcs_repo.branch
 #   }
-#
-#   working_directory = "terraform/env-local/applications-layer/eks-learning-cluster"
+
+#   working_directory = "terraform/env-sandbox/foundation-layer/iam-roles-terraform"
 #   terraform_version = "~> 1.13.0"
-#   auto_apply        = true
-#   execution_mode    = "local" # Run locally with LocalStack
-#
+#   auto_apply        = var.auto_apply_sandbox
+
 #   tag_names = [
-#     "environment:local",
-#     "layer:applications",
-#     "localstack"
+#     "environment:sandbox",
+#     "layer:foundation",
+#     "aws-account:sandbox"
 #   ]
 # }

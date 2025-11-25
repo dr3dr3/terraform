@@ -5,10 +5,10 @@ data "tfe_organization" "main" {
 locals {
   # Common tags for all resources
   common_tags = {
-    Owner       = var.owner
-    CostCenter  = var.cost_center
-    ManagedBy   = "Terraform"
-    Purpose     = "Terraform Cloud Workspace Management"
+    owner       = var.owner
+    environment  = var.environment
+    layer       = var.layer
+    managed-by   = var.managed_by
   }
 
   # GitHub repository details

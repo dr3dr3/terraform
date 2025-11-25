@@ -96,7 +96,7 @@ Before running this Terraform, you need to create the workspace it uses as its b
 
 ## Setup Instructions
 
-### Step 1: Clone and Navigate
+### Step 1: Navigate
 
 ```bash
 cd /workspace/terraform/env-management/foundation-layer/terraform-cloud

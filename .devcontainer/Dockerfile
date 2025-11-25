@@ -3,7 +3,7 @@ FROM node:alpine
 LABEL maintainer="Andre Dreyer"
 
 ARG PRODUCT=terraform
-ARG VERSION=1.13.4
+ARG VERSION=1.14.0
 
 # Install dependencies for Terraform
 RUN apk add --update --virtual .deps --no-cache gnupg && \
