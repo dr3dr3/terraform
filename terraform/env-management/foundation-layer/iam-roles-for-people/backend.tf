@@ -22,10 +22,10 @@ provider "aws" {
 
   default_tags {
     tags = {
-      managed-by    = "terraform"
-      environment   = "management"
-      layer         = "foundation"
-      component     = "iam-people"
+      ManagedBy    = "Terraform"
+      Environment   = "Management"
+      Layer         = "Foundation"
+      Component     = "IAM-People"
     }
   }
 }

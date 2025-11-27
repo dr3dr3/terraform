@@ -8,10 +8,9 @@ terraform {
     }
   }
 
-  # Terraform Cloud backend configuration
   cloud {
     organization = "Datafaced"
-
+  
     workspaces {
       name = "management-foundation-tfc-oidc-role"
     }

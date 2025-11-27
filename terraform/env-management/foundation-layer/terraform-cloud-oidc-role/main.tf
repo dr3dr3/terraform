@@ -68,6 +68,53 @@ resource "aws_iam_role_policy" "terraform_cloud_oidc" {
           "ssoadmin:*"
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "IAMForSSOAccountAssignment"
+        Effect = "Allow"
+        Action = [
+          "iam:GetSAMLProvider",
+          "iam:ListSAMLProviders"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ManageOIDCProvider"
+        Effect = "Allow"
+        Action = [
+          "iam:GetOpenIDConnectProvider",
+          "iam:CreateOpenIDConnectProvider",
+          "iam:DeleteOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:AddClientIDToOpenIDConnectProvider",
+          "iam:RemoveClientIDFromOpenIDConnectProvider",
+          "iam:ListOpenIDConnectProviders",
+          "iam:TagOpenIDConnectProvider",
+          "iam:UntagOpenIDConnectProvider"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ManageOIDCRole"
+        Effect = "Allow"
+        Action = [
+          "iam:GetRole",
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:UpdateRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:ListRoleTags",
+          "iam:PutRolePolicy",
+          "iam:GetRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies"
+        ]
+        Resource = [
+          "arn:aws:iam::*:role/terraform-cloud-*"
+        ]
       }
     ]
   })
