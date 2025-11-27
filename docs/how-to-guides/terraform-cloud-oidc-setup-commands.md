@@ -145,10 +145,7 @@ In Terraform Cloud web interface:
 TFC_AWS_PROVIDER_AUTH = "true"
 
 # Variable 2: Role ARN (use the output from step 5)
-TFC_AWS_ROLE_ARN = "<role-arn-from-step-5>"
-
-# Variable 3: Session name
-TFC_AWS_ROLE_SESSION_NAME = "terraform-cloud-session"
+TFC_AWS_RUN_ROLE_ARN = "<role-arn-from-step-5>"
 ```
 
 Or use Terraform to configure it:

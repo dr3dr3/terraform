@@ -7,6 +7,7 @@ variable "aws_region" {
 variable "tfc_organization" {
   description = "Terraform Cloud organization name"
   type        = string
+  default     = "Datafaced"
 }
 
 variable "tfc_project_dev" {
@@ -50,8 +51,3 @@ variable "owner" {
   type        = string
 }
 
-variable "cost_center" {
-  description = "Cost center tag for resources"
-  type        = string
-  default     = "engineering"
-}

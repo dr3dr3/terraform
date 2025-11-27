@@ -110,11 +110,49 @@ resource "aws_iam_role_policy" "terraform_cloud_oidc" {
           "iam:GetRolePolicy",
           "iam:DeleteRolePolicy",
           "iam:ListRolePolicies",
-          "iam:ListAttachedRolePolicies"
+          "iam:ListAttachedRolePolicies",
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+          "iam:PassRole"
         ]
         Resource = [
-          "arn:aws:iam::*:role/terraform-cloud-*"
+          # Bootstrap OIDC role (self-management)
+          "arn:aws:iam::*:role/terraform-cloud-*",
+          # Terraform workspace roles (VCS-driven CI/CD)
+          "arn:aws:iam::*:role/terraform-*-*-cicd-role",
+          # Human access roles for break-glass scenarios
+          "arn:aws:iam::*:role/terraform-*-*-human-role"
         ]
+      },
+      {
+        Sid    = "ManageIAMPoliciesForTerraformRoles"
+        Effect = "Allow"
+        Action = [
+          "iam:CreatePolicy",
+          "iam:DeletePolicy",
+          "iam:GetPolicy",
+          "iam:GetPolicyVersion",
+          "iam:ListPolicies",
+          "iam:ListPolicyVersions",
+          "iam:CreatePolicyVersion",
+          "iam:DeletePolicyVersion",
+          "iam:SetDefaultPolicyVersion",
+          "iam:TagPolicy",
+          "iam:UntagPolicy"
+        ]
+        Resource = [
+          "arn:aws:iam::*:policy/terraform-*"
+        ]
+      },
+      {
+        Sid    = "ReadOnlyForPlanning"
+        Effect = "Allow"
+        Action = [
+          "sts:GetCallerIdentity",
+          "iam:ListRoles",
+          "iam:ListPolicies"
+        ]
+        Resource = "*"
       }
     ]
   })

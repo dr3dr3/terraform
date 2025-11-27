@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for resources"
   type        = string
-  default     = "ap-woutheast-2"
+  default     = "ap-southeast-2"
 }
 
 variable "tfc_organization" {

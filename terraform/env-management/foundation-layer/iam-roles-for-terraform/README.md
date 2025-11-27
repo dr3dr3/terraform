@@ -1,211 +1,199 @@
 # Management Account - Foundation Layer - IAM Roles for Terraform
 
-This workspace creates IAM roles and OIDC provider configuration to enable Terraform Cloud to manage infrastructure across development, staging, and production environments using dynamic credentials.
+This workspace creates IAM roles for Terraform Cloud VCS-driven workspaces across development, staging, and production environments using dynamic OIDC credentials.
 
 ## Overview
 
-This configuration sets up:
+This configuration creates **workspace-specific IAM roles** that follow the principle of least privilege. Each role is scoped to a specific Terraform Cloud workspace and has only the permissions needed for that environment/layer combination.
 
-1. **OIDC Provider** - Terraform Cloud identity provider in AWS
-2. **IAM Roles** - Environment-specific roles for Terraform Cloud workspaces
-3. **Policies** - Graduated permissions based on environment criticality
+This workspace:
+
+1. **References the existing OIDC Provider** - Created by `terraform-cloud-oidc-role`
+2. **Creates IAM Roles** - Environment and layer-specific roles for VCS workspaces
+3. **Defines Policies** - Graduated permissions based on environment criticality
 
 ## Architecture
 
-Following [ADR-010](../../../../docs/reference/architecture-decision-register/ADR-010-aws-aim-role-structure.md), this implements Phase 2 (execution context split):
+This implements Phase 2 of [ADR-010](../../../../docs/reference/architecture-decision-register/ADR-010-aws-aim-role-structure.md):
 
-- **CICD Roles**: For Terraform Cloud workspace execution
-- **Environment Separation**: Dev, Staging, Production with different permission levels
+```text
+terraform-cloud-oidc-role (Bootstrap)
+    │
+    │ provisions (using OIDC)
+    ▼
+┌─────────────────────────────────────────┐
+│     iam-roles-for-terraform             │
+│     (This Workspace)                    │
+│                                         │
+│  Creates:                               │
+│  • terraform-dev-foundation-cicd-role   │
+│  • terraform-staging-foundation-cicd-role│
+│  • terraform-prod-foundation-cicd-role  │
+└─────────────────────────────────────────┘
+    │
+    │ used by (OIDC)
+    ▼
+┌─────────────────────────────────────────┐
+│     VCS Terraform Workspaces            │
+│                                         │
+│  • dev-foundation workspace             │
+│  • staging-foundation workspace         │
+│  • prod-foundation workspace            │
+└─────────────────────────────────────────┘
+```
 
 ## Prerequisites
 
-### 1. Terraform Cloud Setup
+### 1. Bootstrap Complete
 
-- Terraform Cloud account
-- Organization created
-- Projects created (optional but recommended):
-  - `development`
-  - `staging`
-  - `production`
+The `terraform-cloud-oidc-role` workspace must be applied first. This creates:
 
-### 2. AWS Setup
+- The OIDC provider for Terraform Cloud
+- The bootstrap role with permissions to create other IAM roles
 
-- AWS Management account access
-- AWS CLI configured with SSO (see [AWS CLI SSO Usage Guide](../../../../docs/how-to-guides/aws-cli-sso-usage.md))
-- Admin-level permissions in Management account
+### 2. Terraform Cloud Workspace
 
-### 3. Initial Bootstrap
+Create a workspace in Terraform Cloud:
 
-Since this is creating the OIDC provider and roles, you need to run this **once** with local execution using your AWS credentials.
+- Name: `management-foundation-iam-roles-terraform`
+- Configure to use the bootstrap OIDC role
 
 ## Setup Instructions
 
 ### Step 1: Configure Variables
 
 ```bash
-# Copy the example file
 cp terraform.tfvars.example terraform.tfvars
-
-# Edit with your values
 nano terraform.tfvars
 ```
 
-Update these required values:
+Update:
 
-- `tfc_organization`: Your Terraform Cloud organization name
+- `tfc_organization`: Your Terraform Cloud organization
 - `owner`: Your email address
-- `tfc_workspace_*`: Names of your Terraform Cloud workspaces
+- `tfc_workspace_*`: Names of your environment workspaces
 
 ### Step 2: Update Backend Configuration
 
-Edit `backend.tf` and replace `YOUR_TFC_ORG_NAME` with your actual Terraform Cloud organization.
+Edit `backend.tf` and replace `YOUR_TFC_ORG_NAME` with your organization.
 
-### Step 3: Initial Local Apply (Bootstrap)
+### Step 3: Configure Terraform Cloud Workspace
 
-Since the OIDC provider doesn't exist yet, do the first apply locally:
-
-```bash
-# Authenticate to AWS Management account
-aws sso login --profile management  # or your management account profile
-
-# Set the profile
-export AWS_PROFILE=management
-
-# Initialize Terraform (but don't use cloud backend yet)
-# Comment out the cloud block in backend.tf temporarily
-terraform init
-
-# Review the plan
-terraform plan
-
-# Apply to create OIDC provider and roles
-terraform apply
-```
-
-### Step 4: Configure Terraform Cloud Workspace
-
-Once the OIDC provider and roles are created:
-
-1. **Create the workspace** in Terraform Cloud:
-   - Name: `management-foundation-iam-roles-terraform`
-   - Project: Choose appropriate project
-   - Version Control: Connect to your repo (optional)
-
-2. **Configure Dynamic Credentials**:
-   - Go to workspace settings → Authentication
-   - Enable "Dynamic Provider Credentials"
-   - Select AWS
-   - Add the role ARN (you'll get this from the terraform apply output or manually from AWS Console)
-
-3. **Set Workspace Variables**:
-   - `TFC_AWS_PROVIDER_AUTH` = `true`
-   - `TFC_AWS_RUN_ROLE_ARN` = `arn:aws:iam::ACCOUNT_ID:role/terraform-management-foundation-cicd-role`
-
-### Step 5: Migrate to Terraform Cloud
+In Terraform Cloud, set these environment variables for this workspace:
 
 ```bash
-# Uncomment the cloud block in backend.tf
-nano backend.tf
-
-# Re-initialize to migrate state to Terraform Cloud
-terraform init
-
-# When prompted, type 'yes' to copy state to cloud
+TFC_AWS_PROVIDER_AUTH = "true"
+TFC_AWS_RUN_ROLE_ARN  = "arn:aws:iam::ACCOUNT_ID:role/terraform-cloud-oidc-role"
 ```
 
-### Step 6: Verify
+### Step 4: Run in Terraform Cloud
+
+Queue a plan and apply in Terraform Cloud. The bootstrap OIDC role will be used to create the workspace-specific roles.
+
+## Configuring VCS Workspaces to Use Their Roles
+
+After this workspace creates the roles, configure each VCS workspace:
+
+### For dev-foundation workspace
 
 ```bash
-# In Terraform Cloud, queue a plan run
-# It should authenticate using OIDC and show no changes
+TFC_AWS_PROVIDER_AUTH = "true"
+TFC_AWS_RUN_ROLE_ARN  = "arn:aws:iam::ACCOUNT_ID:role/terraform-dev-foundation-cicd-role"
 ```
 
-## Role ARNs Reference
-
-After applying, note these role ARNs for configuring other workspaces:
-
-- **Dev Foundation**: `arn:aws:iam::ACCOUNT_ID:role/terraform-dev-foundation-cicd-role`
-- **Staging Foundation**: `arn:aws:iam::ACCOUNT_ID:role/terraform-staging-foundation-cicd-role`
-- **Production Foundation**: `arn:aws:iam::ACCOUNT_ID:role/terraform-production-foundation-cicd-role`
-
-## Configuring Other Workspaces
-
-When creating Terraform Cloud workspaces for dev, staging, or production:
-
-1. Enable Dynamic Provider Credentials
-2. Use the appropriate role ARN from above
-3. Set environment variables:
+### For staging-foundation workspace
 
 ```bash
-TFC_AWS_PROVIDER_AUTH=true
-TFC_AWS_RUN_ROLE_ARN=<role-arn-for-environment>
+TFC_AWS_PROVIDER_AUTH = "true"
+TFC_AWS_RUN_ROLE_ARN  = "arn:aws:iam::ACCOUNT_ID:role/terraform-staging-foundation-cicd-role"
 ```
+
+### For prod-foundation workspace
+
+```bash
+TFC_AWS_PROVIDER_AUTH = "true"
+TFC_AWS_RUN_ROLE_ARN  = "arn:aws:iam::ACCOUNT_ID:role/terraform-production-foundation-cicd-role"
+```
+
+## Adding New Roles
+
+To add a role for a new workspace (e.g., `dev-platform`):
+
+### 1. Add the module call in `main.tf`
+
+```hcl
+module "dev_platform_cicd_role" {
+  source = "../../../terraform-modules/terraform-oidc-role"
+
+  role_name          = "terraform-dev-platform-cicd-role"
+  environment        = "dev"
+  layer              = "platform"
+  context            = "cicd"
+  oidc_provider_arn  = data.aws_iam_openid_connect_provider.terraform_cloud.arn
+  oidc_provider_url  = local.tfc_hostname
+  oidc_audience      = local.tfc_audience
+  cicd_subject_claim = "organization:${var.tfc_organization}:project:development:workspace:dev-platform:run_phase:*"
+  session_duration   = 7200
+
+  attach_readonly_policy = true
+  custom_policy_json     = data.aws_iam_policy_document.dev_platform_permissions.json
+
+  tags = local.common_tags
+}
+```
+
+### 2. Add the policy in `policies.tf`
+
+```hcl
+data "aws_iam_policy_document" "dev_platform_permissions" {
+  statement {
+    sid    = "EKSManagement"
+    effect = "Allow"
+    actions = [
+      "eks:*",
+      # Add specific permissions needed
+    ]
+    resources = ["*"]
+  }
+}
+```
+
+### 3. Apply this workspace
+
+The bootstrap role will create the new role.
+
+### 4. Configure the new VCS workspace
+
+Set the environment variables to use the new role.
 
 ## Permission Levels
 
-### Development
+| Environment | Permission Level | Session Duration | Notes |
+|-------------|------------------|------------------|-------|
+| Development | Full CRUD | 2 hours | Can create/delete/modify freely |
+| Staging | Create/Modify | 1 hour | Limited delete, testing before prod |
+| Production | Read + Restricted Modify | 1 hour | Careful changes, regional restrictions |
 
-- Full IAM management for terraform-* resources
-- OIDC provider full management
-- State management permissions
-- Session duration: 2 hours
+## Output Values
 
-### Staging
+After applying, these outputs provide the role ARNs:
 
-- IAM role and policy management for terraform-* resources
-- OIDC provider read-only access
-- Session duration: 1 hour
-
-### Production
-
-- IAM read access with limited update permissions
-- OIDC provider read-only access
-- Region-restricted modifications
-- Session duration: 1 hour
+```bash
+terraform output dev_foundation_cicd_role_arn
+terraform output staging_foundation_cicd_role_arn
+terraform output prod_foundation_cicd_role_arn
+```
 
 ## Security Considerations
 
-1. **OIDC Thumbprint**: The Terraform Cloud thumbprint in `main.tf` should be verified periodically
-2. **Session Duration**: Production roles have shorter sessions to limit exposure
-3. **Permission Boundaries**: Consider adding permission boundaries for additional safety
-4. **CloudTrail**: Ensure CloudTrail is enabled to audit all role usage
-5. **Alerts**: Set up CloudWatch alarms for unexpected role usage
-
-## Troubleshooting
-
-### OIDC Authentication Fails
-
-Check:
-
-- Role ARN in workspace matches output
-- Trust policy subject claim matches workspace/organization pattern
-- OIDC provider thumbprint is current
-
-### Permission Denied
-
-- Verify the role has necessary permissions for the operation
-- Check if permission boundary is blocking the action
-- Review CloudTrail for specific denied action
-
-### State Migration Issues
-
-```bash
-# If migration fails, you can pull state locally
-terraform state pull > terraform.tfstate
-
-# Then manually upload to Terraform Cloud
-```
-
-## Next Steps
-
-After this workspace is configured:
-
-1. Create Terraform Cloud workspaces for each environment
-2. Configure dynamic credentials in each workspace
-3. Begin deploying environment-specific infrastructure
+1. **Workspace Isolation** - Each role trusts only its specific workspace
+2. **No Wildcard Trust** - Unlike the bootstrap role, these roles have exact subject claims
+3. **Least Privilege** - Permissions scoped to layer and environment needs
+4. **Session Duration** - Production roles have shorter sessions
+5. **Audit Trail** - All role usage logged in CloudTrail
 
 ## References
 
+- [IAM Role Architecture](../../../../docs/explanations/iam-role-architecture.md)
 - [ADR-010: AWS IAM Role Structure](../../../../docs/reference/architecture-decision-register/ADR-010-aws-aim-role-structure.md)
-- [AWS CLI SSO Usage Guide](../../../../docs/how-to-guides/aws-cli-sso-usage.md)
 - [Terraform Cloud Dynamic Credentials](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/dynamic-provider-credentials/aws)

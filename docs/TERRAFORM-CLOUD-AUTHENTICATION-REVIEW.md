@@ -75,11 +75,10 @@ Create three resources in your management account:
 
 ### Phase 2: Terraform Cloud Setup (5 minutes)
 
-Configure three environment variables:
+Configure two environment variables:
 
 1. `TFC_AWS_PROVIDER_AUTH` = `"true"` (enable OIDC)
-2. `TFC_AWS_ROLE_ARN` = your role ARN
-3. `TFC_AWS_ROLE_SESSION_NAME` = session identifier
+2. `TFC_AWS_RUN_ROLE_ARN` = your role ARN
 
 ### Phase 3: Test (5 minutes)
 
@@ -162,8 +161,7 @@ Copy this ARN - you'll need it in Step 3.
 2. Create new variable set: `AWS Provider Credentials`
 3. Add these environment variables:
    - `TFC_AWS_PROVIDER_AUTH` = `true`
-   - `TFC_AWS_ROLE_ARN` = `<your-role-arn>`
-   - `TFC_AWS_ROLE_SESSION_NAME` = `terraform-cloud-session`
+   - `TFC_AWS_RUN_ROLE_ARN` = `<your-role-arn>`
 4. Apply to workspace: `management-foundation-iam-roles-for-people`
 
 ### Step 4: Push Test Commit

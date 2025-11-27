@@ -138,49 +138,32 @@ In Terraform Cloud, you need to tell it which role to assume. Create an environm
 4. Scope: Select your workspace (`management-foundation-iam-roles-for-people`)
 5. Add these variables:
 
-```hcl
-# HCL variable (set as HCL, not Terraform variable)
-TF_VAR_aws_role_arn = "arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role"
-
-# Regular environment variable
+```text
+# Required environment variables
 TFC_AWS_PROVIDER_AUTH = "true"
-
-# These depend on your workspace setup
-TFC_AWS_ROLE_ARN = "arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role"
-TFC_AWS_ROLE_SESSION_NAME = "terraform-cloud-session"
+TFC_AWS_RUN_ROLE_ARN = "arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role"
 ```
 
-### Step 3: Update Your Terraform Provider Configuration
+### Step 3: Configure Your Terraform Provider (No Changes Needed!)
 
-Modify your provider block to accept the role ARN from Terraform Cloud:
+With dynamic credentials, **you don't need to modify your provider block**. Terraform Cloud automatically injects AWS credentials via environment variables.
+
+Your provider can be as simple as:
 
 ```hcl
-# In backend.tf or main.tf
-
-variable "tfc_aws_role_arn" {
-  description = "ARN of the AWS role to assume via OIDC (set by Terraform Cloud)"
-  type        = string
-  default     = ""
-}
-
 provider "aws" {
   region = var.aws_region
 
-  # When running in Terraform Cloud with OIDC
-  assume_role {
-    role_arn = var.tfc_aws_role_arn != "" ? var.tfc_aws_role_arn : null
-  }
-
   default_tags {
     tags = {
-      managed-by    = "terraform"
-      environment   = "management"
-      layer         = "foundation"
-      component     = "iam-people"
+      ManagedBy   = "Terraform"
+      Environment = "Management"
     }
   }
 }
 ```
+
+Terraform Cloud handles authentication automatically when `TFC_AWS_PROVIDER_AUTH` is set to `true`.
 
 ### Step 4: Configure Terraform Cloud Workspace
 
@@ -193,9 +176,8 @@ In Terraform Cloud, configure the workspace to use OIDC:
 3. Add environment variables:
 
 ```text
-TFC_AWS_PROVIDER_AUTH       = true
-TFC_AWS_ROLE_ARN            = arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role
-TFC_AWS_ROLE_SESSION_NAME   = terraform-cloud-session
+TFC_AWS_PROVIDER_AUTH  = true
+TFC_AWS_RUN_ROLE_ARN   = arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role
 ```
 
 **Alternatively, via Terraform Code:**
@@ -220,18 +202,10 @@ resource "tfe_variable" "aws_provider_auth" {
   sensitive       = false
 }
 
-resource "tfe_variable" "aws_role_arn" {
+resource "tfe_variable" "aws_run_role_arn" {
   variable_set_id = tfe_variable_set.aws_credentials.id
-  key             = "TFC_AWS_ROLE_ARN"
+  key             = "TFC_AWS_RUN_ROLE_ARN"
   value           = "arn:aws:iam::YOUR_ACCOUNT_ID:role/terraform-cloud-oidc-role"
-  category        = "env"
-  sensitive       = false
-}
-
-resource "tfe_variable" "aws_role_session" {
-  variable_set_id = tfe_variable_set.aws_credentials.id
-  key             = "TFC_AWS_ROLE_SESSION_NAME"
-  value           = "terraform-cloud-session"
   category        = "env"
   sensitive       = false
 }

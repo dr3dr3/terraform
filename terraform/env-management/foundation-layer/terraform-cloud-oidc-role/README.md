@@ -170,8 +170,7 @@ Now that the OIDC role exists, configure your Terraform Cloud workspace to use i
 
    ```bash
    TFC_AWS_PROVIDER_AUTH = "true"
-   TFC_AWS_ROLE_ARN = "arn:aws:iam::ACCOUNT_ID:role/terraform-cloud-oidc-role"
-   TFC_AWS_ROLE_SESSION_NAME = "terraform-cloud-session"
+   TFC_AWS_RUN_ROLE_ARN = "arn:aws:iam::ACCOUNT_ID:role/terraform-cloud-oidc-role"
    ```
 
    Replace `ACCOUNT_ID` with your actual AWS account ID (from the terraform apply output).

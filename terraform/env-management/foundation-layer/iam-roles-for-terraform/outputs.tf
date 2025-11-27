@@ -1,6 +1,6 @@
 output "oidc_provider_arn" {
   description = "ARN of the Terraform Cloud OIDC provider"
-  value       = aws_iam_openid_connect_provider.terraform_cloud.arn
+  value       = data.aws_iam_openid_connect_provider.terraform_cloud.arn
 }
 
 output "oidc_provider_url" {

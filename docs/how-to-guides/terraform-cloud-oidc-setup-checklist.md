@@ -42,13 +42,9 @@ Your Terraform code is set up for **Terraform Cloud VCS-driven workflows** but n
 - [ ] **Create Variable Set** named `AWS Provider Credentials`
   - [ ] Scope to workspace: `management-foundation-iam-roles-for-people`
   - [ ] Add variable: `TFC_AWS_PROVIDER_AUTH = "true"`
-  - [ ] Add variable: `TFC_AWS_ROLE_ARN = "<your-role-arn>"`
-  - [ ] Add variable: `TFC_AWS_ROLE_SESSION_NAME = "terraform-cloud-session"`
+  - [ ] Add variable: `TFC_AWS_RUN_ROLE_ARN = "<your-role-arn>"`
 
-### Phase 3: Update Terraform Code
-
-- [ ] **Update `backend.tf`** (if using assume_role)
-  - Add provider configuration to accept role ARN
+### Phase 3: Test Configuration
 
 - [ ] **Test Configuration**
   - [ ] Push small change to trigger Terraform Cloud run
