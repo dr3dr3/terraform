@@ -87,6 +87,23 @@ resource "tfe_workspace" "management_foundation_iam_terraform" {
   ]
 }
 
+# Environment variables for OIDC authentication - IAM Roles for Terraform
+resource "tfe_variable" "management_foundation_iam_terraform_auth" {
+  workspace_id = tfe_workspace.management_foundation_iam_terraform.id
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "management_foundation_iam_terraform_role_arn" {
+  workspace_id = tfe_workspace.management_foundation_iam_terraform.id
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
+  category     = "env"
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
+
 # # Management - Foundation Layer - Terraform Cloud Management (This workspace!)
 # resource "tfe_workspace" "management_foundation_terraform_cloud" {
 #   name         = "management-foundation-terraform-cloud"

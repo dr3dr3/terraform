@@ -13,7 +13,7 @@ terraform {
     organization = "Datafaced" # Replace with your Terraform Cloud organization name
 
     workspaces {
-      name = "management-foundation-iam-roles-terraform"
+      name = "management-foundation-iam-roles-for-terraform"
     }
   }
 }
@@ -22,14 +22,13 @@ terraform {
 # Uses dynamic credentials from Terraform Cloud OIDC
 provider "aws" {
   region = var.aws_region
-  profile = "MAN-ADMIN"
 
   default_tags {
     tags = {
       Environment = "management"
       Layer       = "foundation"
       ManagedBy   = "Terraform"
-      Workspace   = "management-foundation-iam-roles-terraform"
+      Workspace   = "management-foundation-iam-roles-for-terraform"
     }
   }
 }
