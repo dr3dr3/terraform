@@ -2,24 +2,24 @@
 # Project Outputs
 ################################################################################
 
-output "project_aws_management_id" {
-  description = "ID of the AWS Management project"
-  value       = tfe_project.aws_management.id
-}
-
 output "project_aws_development_id" {
   description = "ID of the AWS Development project"
   value       = tfe_project.aws_development.id
 }
 
+output "project_aws_staging_id" {
+  description = "ID of the AWS Staging project"
+  value       = tfe_project.aws_staging.id
+}
+
+output "project_aws_production_id" {
+  description = "ID of the AWS Production project"
+  value       = tfe_project.aws_production.id
+}
+
 output "project_aws_sandbox_id" {
   description = "ID of the AWS Sandbox project"
   value       = tfe_project.aws_sandbox.id
-}
-
-output "project_local_development_id" {
-  description = "ID of the Local Development project"
-  value       = tfe_project.local_development.id
 }
 
 ################################################################################
@@ -36,33 +36,33 @@ output "workspace_management_iam_terraform_id" {
   value       = tfe_workspace.management_foundation_iam_terraform.id
 }
 
-output "workspace_management_terraform_cloud_id" {
-  description = "ID of management-foundation-terraform-cloud workspace (this workspace)"
-  value       = tfe_workspace.management_foundation_terraform_cloud.id
-}
+# output "workspace_management_terraform_cloud_id" {
+#   description = "ID of management-foundation-terraform-cloud workspace (this workspace)"
+#   value       = tfe_workspace.management_foundation_terraform_cloud.id
+# }
 
 ################################################################################
 # Development Workspace Outputs
 ################################################################################
 
-output "workspace_dev_foundation_iam_id" {
-  description = "ID of development-foundation-iam-roles-terraform workspace"
-  value       = tfe_workspace.dev_foundation_iam_terraform.id
-}
+# output "workspace_dev_foundation_iam_id" {
+#   description = "ID of development-foundation-iam-roles-terraform workspace"
+#   value       = tfe_workspace.dev_foundation_iam_terraform.id
+# }
 
-output "workspace_dev_eks_learning_id" {
-  description = "ID of development-applications-eks-learning-cluster workspace"
-  value       = tfe_workspace.dev_applications_eks_learning.id
-}
+# output "workspace_dev_eks_learning_id" {
+#   description = "ID of development-applications-eks-learning-cluster workspace"
+#   value       = tfe_workspace.dev_applications_eks_learning.id
+# }
 
 ################################################################################
 # Sandbox Workspace Outputs
 ################################################################################
 
-output "workspace_sandbox_foundation_iam_id" {
-  description = "ID of sandbox-foundation-iam-roles-terraform workspace"
-  value       = tfe_workspace.sandbox_foundation_iam_terraform.id
-}
+# output "workspace_sandbox_foundation_iam_id" {
+#   description = "ID of sandbox-foundation-iam-roles-terraform workspace"
+#   value       = tfe_workspace.sandbox_foundation_iam_terraform.id
+# }
 
 ################################################################################
 # Summary Outputs
@@ -73,10 +73,10 @@ output "workspace_count" {
   value = length([
     tfe_workspace.management_foundation_iam_people.id,
     tfe_workspace.management_foundation_iam_terraform.id,
-    tfe_workspace.management_foundation_terraform_cloud.id,
-    tfe_workspace.dev_foundation_iam_terraform.id,
-    tfe_workspace.dev_applications_eks_learning.id,
-    tfe_workspace.sandbox_foundation_iam_terraform.id,
+#    tfe_workspace.management_foundation_terraform_cloud.id,
+#    tfe_workspace.dev_foundation_iam_terraform.id,
+#    tfe_workspace.dev_applications_eks_learning.id,
+#    tfe_workspace.sandbox_foundation_iam_terraform.id,
   ])
 }
 

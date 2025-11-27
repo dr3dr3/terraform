@@ -4,7 +4,7 @@ terraform {
   required_providers {
     tfe = {
       source  = "hashicorp/tfe"
-      version = "~> 0.52.0"
+      version = ">= 0.58.0"
     }
   }
 
@@ -24,4 +24,5 @@ terraform {
 provider "tfe" {
   # Token should be set via TFE_TOKEN environment variable
   # or configured in ~/.terraform.d/credentials.tfrc.json
+  token = var.tfe_token
 }

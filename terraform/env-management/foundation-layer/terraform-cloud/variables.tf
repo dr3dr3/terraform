@@ -4,6 +4,12 @@ variable "tfc_organization" {
   default     = "Datafaced"
 }
 
+variable "tfe_token" {
+  description = "Terraform Enterprise/Cloud API token (set via environment variable or credentials file)"
+  type        = string
+  sensitive   = true
+}
+
 variable "github_oauth_token_id" {
   description = "GitHub OAuth token ID for VCS integration (obtained from Terraform Cloud UI)"
   type        = string

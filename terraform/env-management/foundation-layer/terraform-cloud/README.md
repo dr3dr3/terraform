@@ -54,21 +54,25 @@ You need to connect GitHub to Terraform Cloud to enable VCS-driven workflows:
 
 ### 3. Terraform Cloud API Token
 
-Create an organization or user token for Terraform to authenticate:
+You must use a **User Token** (personal API token) to manage Terraform Cloud projects via Terraform. Organization tokens cannot create projects.
 
-#### Option A: Organization Token (Recommended)
+**Token Capability Comparison:**
 
-1. Go to: **Settings** → **Teams & Governance** → **API Tokens**
-2. Click **Create an organization token**
-3. Description: "Terraform Cloud Management"
-4. Copy the token (shown only once)
+| Action | Organization Token | User Token |
+|--------|-------------------|-----------|
+| Create projects | ❌ No | ✅ Yes |
+| Create workspaces | ✅ Yes | ✅ Yes |
+| Manage teams | ✅ Yes | ✅ Yes |
+| Manage team membership | ✅ Yes | ✅ Yes |
+| Run plans and applies | ❌ No | ✅ Yes |
 
-#### Option B: User Token
+**Create a User Token:**
 
-1. Click your profile icon → **User Settings** → **Tokens**
-2. Click **Create an API token**
-3. Description: "Terraform Cloud Management"
-4. Copy the token (shown only once)
+1. Click your profile icon (top right) → **User Settings**
+2. Click **Tokens** in the left sidebar
+3. Click **Create an API token**
+4. Description: "Terraform Cloud Management - IaC"
+5. Copy the token (shown only once)
 
 #### Set Token as Environment Variable
 
@@ -290,9 +294,10 @@ set -gx TFE_TOKEN "your-token-here"
 
 1. **Never commit `terraform.tfvars`** → Add to `.gitignore`
 2. **Store TFE_TOKEN securely** → Use environment variables or credentials file
-3. **Use organization tokens** → Preferred over user tokens for team usage
-4. **Enable 2FA** → On Terraform Cloud account
-5. **Review workspace permissions** → Limit who can approve applies
+3. **Use User Tokens for IaC** → Required for creating projects. Organization tokens cannot create projects
+4. **Limit token scope** → Consider using a dedicated user account for infrastructure as code
+5. **Enable 2FA** → On Terraform Cloud account
+6. **Review workspace permissions** → Limit who can approve applies
 
 ## Next Steps
 

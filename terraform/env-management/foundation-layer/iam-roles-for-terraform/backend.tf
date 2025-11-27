@@ -22,6 +22,7 @@ terraform {
 # Uses dynamic credentials from Terraform Cloud OIDC
 provider "aws" {
   region = var.aws_region
+  profile = "MAN-ADMIN"
 
   default_tags {
     tags = {

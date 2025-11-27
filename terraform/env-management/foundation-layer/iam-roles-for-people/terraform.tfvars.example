@@ -1,11 +1,14 @@
-# Owner and cost center tags
-owner       = "your-name@example.com"
-cost_center = "engineering"
+# Variables: Tags
+owner       = "platform-team"
+environment = "management"
+managed-by  = "terraform"
+layer       = "foundation"
 
-# Optional: Add additional AWS account IDs to assign permission sets to
+# Optional: Add additional AWS account IDs to assign permission sets
 # This allows the groups to access other accounts in your organization
-# additional_account_ids = [
-#   "111111111111",  # Dev account
-#   "222222222222",  # Staging account
-#   "333333333333",  # Production account
-# ]
+additional_account_ids = [
+  "126350206316",  # Development account
+  "163436765579",  # Staging account
+  "820485071161",  # Production account
+  "898468025925",  # Sandbox account
+]

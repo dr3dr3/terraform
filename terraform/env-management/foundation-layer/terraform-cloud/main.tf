@@ -3,13 +3,6 @@ data "tfe_organization" "main" {
 }
 
 locals {
-  # Common tags for all resources
-  common_tags = {
-    owner       = var.owner
-    environment  = var.environment
-    layer       = var.layer
-    managed-by   = var.managed_by
-  }
 
   # GitHub repository details
   vcs_repo = {

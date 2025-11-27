@@ -2,6 +2,26 @@
 # Management Environment Workspaces
 ################################################################################
 
+# Management - Foundation Layer - Terraform Cloud OIDC Role
+resource "tfe_workspace" "management_foundation_tfc_oidc_role" {
+  name         = "management-foundation-tfc-oidc-role"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_management.id
+  description  = "OIDC provider and Terraform Cloud"
+
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_management
+
+  tag_names = [
+    "environment:management",
+    "layer:foundation",
+    "aws-account:management"
+  ]
+}
+
+# Note: OIDC variables for tfc-oidc-role workspace were created manually
+# and are not managed via Terraform to avoid chicken-and-egg bootstrap issues
+
 # Management - Foundation Layer - IAM Roles for People
 resource "tfe_workspace" "management_foundation_iam_people" {
   name         = "management-foundation-iam-roles-for-people"
@@ -24,6 +44,23 @@ resource "tfe_workspace" "management_foundation_iam_people" {
     "layer:foundation",
     "aws-account:management"
   ]
+}
+
+# Environment variables for OIDC authentication - IAM Roles for People
+resource "tfe_variable" "management_foundation_iam_people_auth" {
+  workspace_id = tfe_workspace.management_foundation_iam_people.id
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "management_foundation_iam_people_role_arn" {
+  workspace_id = tfe_workspace.management_foundation_iam_people.id
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
+  category     = "env"
+  description  = "AWS IAM role ARN for OIDC authentication"
 }
 
 # Management - Foundation Layer - IAM Roles for Terraform (OIDC)
@@ -50,29 +87,29 @@ resource "tfe_workspace" "management_foundation_iam_terraform" {
   ]
 }
 
-# Management - Foundation Layer - Terraform Cloud Management (This workspace!)
-resource "tfe_workspace" "management_foundation_terraform_cloud" {
-  name         = "management-foundation-terraform-cloud"
-  organization = data.tfe_organization.main.name
-  project_id   = tfe_project.aws_management.id
-  description  = "Terraform Cloud projects, workspaces, and configuration management"
+# # Management - Foundation Layer - Terraform Cloud Management (This workspace!)
+# resource "tfe_workspace" "management_foundation_terraform_cloud" {
+#   name         = "management-foundation-terraform-cloud"
+#   organization = data.tfe_organization.main.name
+#   project_id   = tfe_project.aws_management.id
+#   description  = "Terraform Cloud projects, workspaces, and configuration management"
 
-  vcs_repo {
-    identifier     = local.vcs_repo.identifier
-    oauth_token_id = local.vcs_repo.oauth_token_id
-    branch         = local.vcs_repo.branch
-  }
+#   vcs_repo {
+#     identifier     = local.vcs_repo.identifier
+#     oauth_token_id = local.vcs_repo.oauth_token_id
+#     branch         = local.vcs_repo.branch
+#   }
 
-  working_directory = "terraform/env-management/foundation-layer/terraform-cloud"
-  terraform_version = "~> 1.14.0"
-  auto_apply        = false # Always require manual approval for meta-terraform
+#   working_directory = "terraform/env-management/foundation-layer/terraform-cloud"
+#   terraform_version = "~> 1.14.0"
+#   auto_apply        = false # Always require manual approval for meta-terraform
 
-  tag_names = [
-    "environment:management",
-    "layer:foundation",
-    "meta-terraform"
-  ]
-}
+#   tag_names = [
+#     "environment:management",
+#     "layer:foundation",
+#     "meta-terraform"
+#   ]
+# }
 
 ################################################################################
 # Development Environment Workspaces

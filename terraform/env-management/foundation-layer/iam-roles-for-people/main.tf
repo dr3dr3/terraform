@@ -10,10 +10,10 @@ locals {
 
   # Common tags for all resources
   common_tags = {
-    Owner       = var.owner
-    CostCenter  = var.cost_center
-    Project     = "iam-identity-center"
-    ManagedBy   = "Terraform"
+    Owner         = var.owner
+    Environment   = var.environment
+    Layer         = var.layer
+    ManagedBy    = var.managed_by
   }
 }
 
@@ -46,8 +46,8 @@ resource "aws_ssoadmin_permission_set" "admin" {
   tags = merge(
     local.common_tags,
     {
-      Name    = "AdministratorAccess"
-      Purpose = "Full administrative access"
+      name    = "AdministratorAccess"
+      purpose = "Full administrative access"
     }
   )
 }
@@ -68,8 +68,8 @@ resource "aws_ssoadmin_permission_set" "platform_engineers" {
   tags = merge(
     local.common_tags,
     {
-      Name    = "PlatformEngineerAccess"
-      Purpose = "EKS cluster management and platform infrastructure"
+      name    = "PlatformEngineerAccess"
+      purpose = "EKS cluster management and platform infrastructure"
     }
   )
 }
@@ -90,8 +90,8 @@ resource "aws_ssoadmin_permission_set" "readonly" {
   tags = merge(
     local.common_tags,
     {
-      Name    = "ReadOnlyAccess"
-      Purpose = "Read-only access for auditing and monitoring"
+      name    = "ReadOnlyAccess"
+      purpose = "Read-only access for auditing and monitoring"
     }
   )
 }

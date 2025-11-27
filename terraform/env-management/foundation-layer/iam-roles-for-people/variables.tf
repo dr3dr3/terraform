@@ -1,12 +1,25 @@
 variable "owner" {
   description = "Owner tag for resources"
   type        = string
+  default     = "platform-team"
 }
 
-variable "cost_center" {
-  description = "Cost center tag for resources"
+variable "environment" {
+  description = "Environment tag for resources"
   type        = string
-  default     = "engineering"
+  default     = "management"
+}
+
+variable "managed_by" {
+  description = "Managed-by tag for resources"
+  type        = string
+  default     = "terraform-cloud"
+}
+
+variable "layer" {
+  description = "Layer tag for resources"
+  type        = string
+  default     = "foundation"
 }
 
 variable "additional_account_ids" {
