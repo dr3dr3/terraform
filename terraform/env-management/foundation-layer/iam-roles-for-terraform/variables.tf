@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region for resources"
   type        = string
-  default     = "us-east-1"
+  default     = "ap-southeast-2"
 }
 
 variable "tfc_organization" {
@@ -49,5 +49,6 @@ variable "tfc_workspace_prod_foundation" {
 variable "owner" {
   description = "Owner tag for resources"
   type        = string
+  default     = "Andre Dreyer"
 }
 
