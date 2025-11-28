@@ -7,11 +7,13 @@ variable "aws_region" {
 variable "github_org" {
   description = "GitHub organization or username that owns the repository"
   type        = string
+  default     = "dr3dr3"
 }
 
 variable "github_repo" {
   description = "GitHub repository name for the Terraform code"
   type        = string
+  default     = "terraform"
 }
 
 variable "session_duration" {
