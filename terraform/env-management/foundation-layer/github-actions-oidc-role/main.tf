@@ -16,7 +16,7 @@ provider "aws" {
       ManagedBy   = "Terraform"
       Owner       = var.owner
       Project     = "terraform-infrastructure"
-      Environment = "management"
+      Environment = "Management"
     }
   }
 }
@@ -87,7 +87,7 @@ resource "aws_iam_role" "github_actions_dev_platform" {
 
   tags = {
     Name        = "github-actions-dev-platform"
-    Environment = "development"
+    Environment = "Development"
     Layer       = "platform"
     Purpose     = "EKS provisioning via GitHub Actions"
   }

@@ -35,9 +35,10 @@ resource "tfe_workspace" "management_foundation_iam_people" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory = "terraform/env-management/foundation-layer/iam-roles-for-people"
-  terraform_version = "~> 1.14.0"
-  auto_apply        = var.auto_apply_management
+  working_directory      = "terraform/env-management/foundation-layer/iam-roles-for-people"
+  terraform_version      = "~> 1.14.0"
+  auto_apply             = var.auto_apply_management
+  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
 
   tag_names = [
     "environment:management",
@@ -76,9 +77,10 @@ resource "tfe_workspace" "management_foundation_iam_terraform" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory = "terraform/env-management/foundation-layer/iam-roles-for-terraform"
-  terraform_version = "~> 1.14.0"
-  auto_apply        = var.auto_apply_management
+  working_directory      = "terraform/env-management/foundation-layer/iam-roles-for-terraform"
+  terraform_version      = "~> 1.14.0"
+  auto_apply             = var.auto_apply_management
+  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
 
   tag_names = [
     "environment:management",
@@ -118,9 +120,10 @@ resource "tfe_workspace" "management_foundation_gha_oidc" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory = "terraform/env-management/foundation-layer/github-actions-oidc-role"
-  terraform_version = "~> 1.14.0"
-  auto_apply        = var.auto_apply_management
+  working_directory      = "terraform/env-management/foundation-layer/github-actions-oidc-role"
+  terraform_version      = "~> 1.14.0"
+  auto_apply             = var.auto_apply_management
+  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
 
   tag_names = [
     "environment:management",
