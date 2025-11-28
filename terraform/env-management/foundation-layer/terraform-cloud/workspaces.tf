@@ -104,6 +104,49 @@ resource "tfe_variable" "management_foundation_iam_terraform_role_arn" {
   description  = "AWS IAM role ARN for OIDC authentication"
 }
 
+# Management - Foundation Layer - GitHub Actions OIDC Role
+# Creates OIDC provider and IAM role for GitHub Actions to provision EKS (ADR-013)
+resource "tfe_workspace" "management_foundation_gha_oidc" {
+  name         = "management-github-actions-oidc"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_management.id
+  description  = "GitHub Actions OIDC provider and IAM role for EKS provisioning"
+
+  vcs_repo {
+    identifier     = local.vcs_repo.identifier
+    oauth_token_id = local.vcs_repo.oauth_token_id
+    branch         = local.vcs_repo.branch
+  }
+
+  working_directory = "terraform/env-management/foundation-layer/github-actions-oidc-role"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_management
+
+  tag_names = [
+    "environment:management",
+    "layer:foundation",
+    "aws-account:management",
+    "cicd:github-actions"
+  ]
+}
+
+# Environment variables for OIDC authentication - GitHub Actions OIDC Role
+resource "tfe_variable" "management_foundation_gha_oidc_auth" {
+  workspace_id = tfe_workspace.management_foundation_gha_oidc.id
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "management_foundation_gha_oidc_role_arn" {
+  workspace_id = tfe_workspace.management_foundation_gha_oidc.id
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
+  category     = "env"
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
+
 # # Management - Foundation Layer - Terraform Cloud Management (This workspace!)
 # resource "tfe_workspace" "management_foundation_terraform_cloud" {
 #   name         = "management-foundation-terraform-cloud"

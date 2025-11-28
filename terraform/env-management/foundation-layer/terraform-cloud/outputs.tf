@@ -36,6 +36,11 @@ output "workspace_management_iam_terraform_id" {
   value       = tfe_workspace.management_foundation_iam_terraform.id
 }
 
+output "workspace_management_gha_oidc_id" {
+  description = "ID of management-github-actions-oidc workspace"
+  value       = tfe_workspace.management_foundation_gha_oidc.id
+}
+
 # output "workspace_management_terraform_cloud_id" {
 #   description = "ID of management-foundation-terraform-cloud workspace (this workspace)"
 #   value       = tfe_workspace.management_foundation_terraform_cloud.id
@@ -73,6 +78,7 @@ output "workspace_count" {
   value = length([
     tfe_workspace.management_foundation_iam_people.id,
     tfe_workspace.management_foundation_iam_terraform.id,
+    tfe_workspace.management_foundation_gha_oidc.id,
 #    tfe_workspace.management_foundation_terraform_cloud.id,
 #    tfe_workspace.dev_foundation_iam_terraform.id,
 #    tfe_workspace.dev_applications_eks_learning.id,
