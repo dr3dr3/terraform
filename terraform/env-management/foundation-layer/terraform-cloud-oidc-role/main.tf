@@ -121,7 +121,9 @@ resource "aws_iam_role_policy" "terraform_cloud_oidc" {
           # Terraform workspace roles (VCS-driven CI/CD)
           "arn:aws:iam::*:role/terraform-*-*-cicd-role",
           # Human access roles for break-glass scenarios
-          "arn:aws:iam::*:role/terraform-*-*-human-role"
+          "arn:aws:iam::*:role/terraform-*-*-human-role",
+          # GitHub Actions OIDC roles (per ADR-013)
+          "arn:aws:iam::*:role/github-actions-*"
         ]
       },
       {
