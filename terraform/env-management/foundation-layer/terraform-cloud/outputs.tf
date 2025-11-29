@@ -41,14 +41,19 @@ output "workspace_management_gha_oidc_id" {
   value       = tfe_workspace.management_foundation_gha_oidc.id
 }
 
-# output "workspace_management_terraform_cloud_id" {
-#   description = "ID of management-foundation-terraform-cloud workspace (this workspace)"
-#   value       = tfe_workspace.management_foundation_terraform_cloud.id
-# }
-
 ################################################################################
 # Development Workspace Outputs
 ################################################################################
+
+output "workspace_dev_platform_eks_id" {
+  description = "ID of development-platform-eks workspace"
+  value       = tfe_workspace.dev_platform_eks.id
+}
+
+output "workspace_dev_platform_eks_name" {
+  description = "Name of development-platform-eks workspace"
+  value       = tfe_workspace.dev_platform_eks.name
+}
 
 # output "workspace_dev_foundation_iam_id" {
 #   description = "ID of development-foundation-iam-roles-terraform workspace"
@@ -79,6 +84,7 @@ output "workspace_count" {
     tfe_workspace.management_foundation_iam_people.id,
     tfe_workspace.management_foundation_iam_terraform.id,
     tfe_workspace.management_foundation_gha_oidc.id,
+    tfe_workspace.dev_platform_eks.id,
 #    tfe_workspace.management_foundation_terraform_cloud.id,
 #    tfe_workspace.dev_foundation_iam_terraform.id,
 #    tfe_workspace.dev_applications_eks_learning.id,

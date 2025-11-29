@@ -1,0 +1,273 @@
+# =============================================================================
+# GitHub Actions Workflow: EKS Auto Mode - Development Platform
+# =============================================================================
+# Per ADR-013: Uses OIDC federation to assume IAM role for Terraform operations
+# Triggers on changes to the EKS Auto Mode configuration
+# =============================================================================
+
+name: "Terraform: Dev Platform EKS"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/env-development/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-dev-platform-eks.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform/env-development/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-dev-platform-eks.yml"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to perform"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+# Ensure only one workflow runs at a time for this environment
+concurrency:
+  group: terraform-dev-platform-eks
+  cancel-in-progress: false
+
+env:
+  TF_CLOUD_ORGANIZATION: "Datafaced"
+  TF_WORKSPACE: "development-platform-eks"
+  TF_VAR_FILE: "terraform.tfvars"
+  WORKING_DIR: "terraform/env-development/platform-layer/eks-auto-mode"
+  AWS_REGION: "ap-southeast-2"
+
+# Required for OIDC authentication
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ===========================================================================
+  # Terraform Plan
+  # ===========================================================================
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exitcode }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV_PLATFORM }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Format Check
+        id: fmt
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          terraform plan -no-color -input=false -out=tfplan \
+            -detailed-exitcode
+        continue-on-error: true
+
+      - name: Save Plan Output
+        if: steps.plan.outcome == 'success' || steps.plan.outcome == 'failure'
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform show -no-color tfplan > plan_output.txt
+
+      - name: Upload Plan Artifact
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.WORKING_DIR }}/tfplan
+          retention-days: 5
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('${{ env.WORKING_DIR }}/plan_output.txt', 'utf8');
+            
+            // Truncate if too long
+            const maxLength = 60000;
+            const truncatedPlan = planOutput.length > maxLength 
+              ? planOutput.substring(0, maxLength) + '\n\n... (truncated)'
+              : planOutput;
+            
+            const body = `## Terraform Plan Results 🏗️
+            
+            **Workspace:** \`${{ env.TF_WORKSPACE }}\`
+            **Directory:** \`${{ env.WORKING_DIR }}\`
+            
+            ### Format Check: ${{ steps.fmt.outcome == 'success' && '✅ Passed' || '⚠️ Failed' }}
+            ### Init: ${{ steps.init.outcome == 'success' && '✅ Passed' || '❌ Failed' }}
+            ### Validate: ${{ steps.validate.outcome == 'success' && '✅ Passed' || '❌ Failed' }}
+            ### Plan: ${{ steps.plan.outcome == 'success' && '✅ Success' || '❌ Failed' }}
+            
+            <details>
+            <summary>Show Plan Output</summary>
+            
+            \`\`\`hcl
+            ${truncatedPlan}
+            \`\`\`
+            
+            </details>
+            
+            ---
+            *Workflow: \`${{ github.workflow }}\` | Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Plan Status
+        if: steps.plan.outputs.exitcode == '1'
+        run: exit 1
+
+  # ===========================================================================
+  # Terraform Apply (only on main branch push or manual trigger)
+  # ===========================================================================
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+
+    environment:
+      name: development
+      url: https://console.aws.amazon.com/eks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV_PLATFORM }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Output Cluster Info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "## EKS Cluster Deployed! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cluster Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Name:** $(terraform output -raw cluster_name)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Endpoint:** $(terraform output -raw cluster_endpoint)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $(terraform output -raw cluster_version)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configure kubectl" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "$(terraform output -raw configure_kubectl)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Terraform Destroy (manual trigger only)
+  # ===========================================================================
+  terraform-destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+
+    environment:
+      name: development-destroy
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV_PLATFORM }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform plan -destroy -no-color -input=false
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform destroy -auto-approve -input=false
+
+      - name: Destruction Complete
+        run: |
+          echo "## EKS Cluster Destroyed 🗑️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The development EKS cluster has been destroyed." >> $GITHUB_STEP_SUMMARY

@@ -35,10 +35,9 @@ resource "tfe_workspace" "management_foundation_iam_people" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory      = "terraform/env-management/foundation-layer/iam-roles-for-people"
-  terraform_version      = "~> 1.14.0"
-  auto_apply             = var.auto_apply_management
-  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
+  working_directory = "terraform/env-management/foundation-layer/iam-roles-for-people"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_management
 
   tag_names = [
     "environment:management",
@@ -77,10 +76,9 @@ resource "tfe_workspace" "management_foundation_iam_terraform" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory      = "terraform/env-management/foundation-layer/iam-roles-for-terraform"
-  terraform_version      = "~> 1.14.0"
-  auto_apply             = var.auto_apply_management
-  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
+  working_directory = "terraform/env-management/foundation-layer/iam-roles-for-terraform"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_management
 
   tag_names = [
     "environment:management",
@@ -120,10 +118,9 @@ resource "tfe_workspace" "management_foundation_gha_oidc" {
     branch         = local.vcs_repo.branch
   }
 
-  working_directory      = "terraform/env-management/foundation-layer/github-actions-oidc-role"
-  terraform_version      = "~> 1.14.0"
-  auto_apply             = var.auto_apply_management
-  auto_apply_run_trigger = true # Auto-apply for VCS-triggered runs
+  working_directory = "terraform/env-management/foundation-layer/github-actions-oidc-role"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_management
 
   tag_names = [
     "environment:management",
@@ -150,6 +147,41 @@ resource "tfe_variable" "management_foundation_gha_oidc_role_arn" {
   description  = "AWS IAM role ARN for OIDC authentication"
 }
 
+################################################################################
+# Development Environment Workspaces
+################################################################################
+
+# Development - Platform Layer - EKS Auto Mode Cluster
+# This workspace is GitHub Actions-driven (not VCS-driven)
+# Per ADR-013: Uses OIDC federation with GitHub Actions for authentication
+resource "tfe_workspace" "dev_platform_eks" {
+  name         = "development-platform-eks"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_development.id
+  description  = "EKS Auto Mode cluster for development environment"
+
+  # No VCS repo - triggered by GitHub Actions workflow
+  # vcs_repo block intentionally omitted
+
+  working_directory = "terraform/env-development/platform-layer/eks-auto-mode"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false  # GitHub Actions workflow controls apply
+
+  # Allow runs to be triggered externally (by GitHub Actions)
+  queue_all_runs = false
+
+  tag_names = [
+    "environment:development",
+    "layer:platform",
+    "aws-account:development",
+    "cicd:github-actions",
+    "workload:eks"
+  ]
+}
+
+# Note: This workspace does NOT use TFC OIDC for AWS authentication
+# Instead, GitHub Actions assumes the IAM role and passes credentials
+
 # # Management - Foundation Layer - Terraform Cloud Management (This workspace!)
 # resource "tfe_workspace" "management_foundation_terraform_cloud" {
 #   name         = "management-foundation-terraform-cloud"
@@ -171,86 +203,5 @@ resource "tfe_variable" "management_foundation_gha_oidc_role_arn" {
 #     "environment:management",
 #     "layer:foundation",
 #     "meta-terraform"
-#   ]
-# }
-
-################################################################################
-# Development Environment Workspaces
-################################################################################
-
-# Development - Foundation Layer - IAM Roles for Terraform
-# resource "tfe_workspace" "dev_foundation_iam_terraform" {
-#   name         = "development-foundation-iam-roles-terraform"
-#   organization = data.tfe_organization.main.name
-#   project_id   = tfe_project.aws_development.id
-#   description  = "IAM roles for Terraform Cloud in development account"
-
-#   vcs_repo {
-#     identifier     = local.vcs_repo.identifier
-#     oauth_token_id = local.vcs_repo.oauth_token_id
-#     branch         = local.vcs_repo.branch
-#   }
-
-#   working_directory = "terraform/env-development/foundation-layer/iam-roles-terraform"
-#   terraform_version = "~> 1.13.0"
-#   auto_apply        = var.auto_apply_dev
-
-#   tag_names = [
-#     "environment:development",
-#     "layer:foundation",
-#     "aws-account:development"
-#   ]
-# }
-
-# Development - Applications Layer - EKS Learning Cluster
-# resource "tfe_workspace" "dev_applications_eks_learning" {
-#   name         = "development-applications-eks-learning-cluster"
-#   organization = data.tfe_organization.main.name
-#   project_id   = tfe_project.aws_development.id
-#   description  = "EKS learning cluster in development environment"
-
-#   vcs_repo {
-#     identifier     = local.vcs_repo.identifier
-#     oauth_token_id = local.vcs_repo.oauth_token_id
-#     branch         = local.vcs_repo.branch
-#   }
-
-#   working_directory = "terraform/env-development/applications-layer/eks-learning-cluster"
-#   terraform_version = "~> 1.13.0"
-#   auto_apply        = var.auto_apply_dev
-
-#   tag_names = [
-#     "environment:development",
-#     "layer:applications",
-#     "service:eks",
-#     "aws-account:development"
-#   ]
-# }
-
-################################################################################
-# Sandbox Environment Workspaces
-################################################################################
-
-# Sandbox - Foundation Layer - IAM Roles for Terraform
-# resource "tfe_workspace" "sandbox_foundation_iam_terraform" {
-#   name         = "sandbox-foundation-iam-roles-terraform"
-#   organization = data.tfe_organization.main.name
-#   project_id   = tfe_project.aws_sandbox.id
-#   description  = "IAM roles for Terraform Cloud in sandbox account"
-
-#   vcs_repo {
-#     identifier     = local.vcs_repo.identifier
-#     oauth_token_id = local.vcs_repo.oauth_token_id
-#     branch         = local.vcs_repo.branch
-#   }
-
-#   working_directory = "terraform/env-sandbox/foundation-layer/iam-roles-terraform"
-#   terraform_version = "~> 1.13.0"
-#   auto_apply        = var.auto_apply_sandbox
-
-#   tag_names = [
-#     "environment:sandbox",
-#     "layer:foundation",
-#     "aws-account:sandbox"
 #   ]
 # }

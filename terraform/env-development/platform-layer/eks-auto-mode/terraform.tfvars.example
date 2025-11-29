@@ -1,0 +1,70 @@
+# =============================================================================
+# Example Terraform Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and customize values
+# Variables marked with [DECISION REQUIRED] need your review
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General Configuration
+# -----------------------------------------------------------------------------
+aws_region  = "ap-southeast-2"
+environment = "dev"
+owner       = "Platform-Team"
+
+# -----------------------------------------------------------------------------
+# VPC Configuration [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# Ensure this CIDR doesn't overlap with other VPCs you may peer with
+vpc_cidr = "10.0.0.0/16"
+
+# Number of AZs: 2 (lower cost) or 3 (higher availability)
+az_count = 3
+
+# Single NAT Gateway: true (lower cost ~$32/mo) or false (HA ~$96/mo for 3 AZs)
+single_nat_gateway = false
+
+# -----------------------------------------------------------------------------
+# EKS Configuration
+# -----------------------------------------------------------------------------
+cluster_name       = "eks-auto"
+kubernetes_version = "1.31"
+
+# -----------------------------------------------------------------------------
+# Cluster Access [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# Set to false to restrict access to VPC only (more secure)
+cluster_endpoint_public_access  = true
+cluster_endpoint_private_access = true
+
+# Restrict public access to specific CIDRs (recommended for production)
+# Example: ["203.0.113.0/24", "198.51.100.0/24"]
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+# -----------------------------------------------------------------------------
+# Logging [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# All log types: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+# Minimum recommended: ["api", "audit"]
+cluster_enabled_log_types     = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+cloudwatch_log_retention_days = 30
+
+# -----------------------------------------------------------------------------
+# Security
+# -----------------------------------------------------------------------------
+enable_secrets_encryption = true
+
+# -----------------------------------------------------------------------------
+# EKS Auto Mode
+# -----------------------------------------------------------------------------
+auto_mode_enabled    = true
+auto_mode_node_pools = ["general-purpose", "system"]
+
+# -----------------------------------------------------------------------------
+# Access Management
+# -----------------------------------------------------------------------------
+enable_cluster_creator_admin_permissions = true
+
+# Add additional admins by ARN
+# Example: ["arn:aws:iam::123456789012:role/AdminRole"]
+additional_cluster_admins = []
