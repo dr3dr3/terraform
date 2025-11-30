@@ -2,7 +2,17 @@
 # GitHub Actions Workflow: EKS Auto Mode - Development Platform
 # =============================================================================
 # Per ADR-013: Uses OIDC federation to assume IAM role for Terraform operations
-# Triggers on changes to the EKS Auto Mode configuration
+# Per ADR-014: API/GHA trigger with manual provisioning for learning environments
+#
+# Triggers:
+#   - Push to main: Auto-apply (no manual approval for dev)
+#   - Pull request: Plan only with PR comment
+#   - Manual: Plan, Apply, or Destroy via workflow_dispatch
+#
+# Cost Protection:
+#   - TTL-based auto-destroy: Clusters are tagged with creation time
+#   - Separate ttl-check workflow destroys clusters exceeding TTL
+#   - Default TTL: 8 hours (configurable via workflow input)
 # =============================================================================
 
 name: "Terraform: Dev Platform EKS"
@@ -33,6 +43,11 @@ on:
           - plan
           - apply
           - destroy
+      ttl_hours:
+        description: "Time-to-live in hours (0 = no auto-destroy)"
+        required: false
+        default: "8"
+        type: string
 
 # Ensure only one workflow runs at a time for this environment
 concurrency:
@@ -45,6 +60,7 @@ env:
   TF_VAR_FILE: "terraform.tfvars"
   WORKING_DIR: "terraform/env-development/platform-layer/eks-auto-mode"
   AWS_REGION: "ap-southeast-2"
+  DEFAULT_TTL_HOURS: "8"
 
 # Required for OIDC authentication
 permissions:
@@ -54,11 +70,49 @@ permissions:
 
 jobs:
   # ===========================================================================
+  # Determine Action Based on Trigger
+  # ===========================================================================
+  determine-action:
+    name: "Determine Action"
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.set-action.outputs.action }}
+      should_run: ${{ steps.set-action.outputs.should_run }}
+      ttl_hours: ${{ steps.set-action.outputs.ttl_hours }}
+    steps:
+      - name: Determine action based on trigger
+        id: set-action
+        run: |
+          # Default values
+          ACTION="plan"
+          SHOULD_RUN="true"
+          TTL_HOURS="${{ env.DEFAULT_TTL_HOURS }}"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ACTION="${{ github.event.inputs.action }}"
+            # Use provided TTL or default
+            if [[ -n "${{ github.event.inputs.ttl_hours }}" ]]; then
+              TTL_HOURS="${{ github.event.inputs.ttl_hours }}"
+            fi
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            ACTION="apply"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ACTION="plan"
+          fi
+
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "ttl_hours=$TTL_HOURS" >> $GITHUB_OUTPUT
+          echo "Determined action: $ACTION with TTL: ${TTL_HOURS}h"
+
+  # ===========================================================================
   # Terraform Plan
   # ===========================================================================
   terraform-plan:
     name: "Terraform Plan"
     runs-on: ubuntu-latest
+    needs: determine-action
+    if: needs.determine-action.outputs.action != 'destroy'
 
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
@@ -168,19 +222,15 @@ jobs:
         run: exit 1
 
   # ===========================================================================
-  # Terraform Apply (only on main branch push or manual trigger)
+  # Terraform Apply (ADR-014: Auto-apply for dev - no manual approval required)
   # ===========================================================================
   terraform-apply:
     name: "Terraform Apply"
     runs-on: ubuntu-latest
-    needs: terraform-plan
+    needs: [determine-action, terraform-plan]
     if: |
-      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
-
-    environment:
-      name: development
-      url: https://console.aws.amazon.com/eks
+      needs.determine-action.outputs.action == 'apply' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout repository
@@ -212,19 +262,57 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform apply -auto-approve -input=false tfplan
 
+      - name: Tag cluster with TTL metadata
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+          if [[ -n "$CLUSTER_NAME" ]]; then
+            TTL_HOURS="${{ needs.determine-action.outputs.ttl_hours }}"
+            CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            # Calculate destroy-by time
+            if [[ "$TTL_HOURS" != "0" ]]; then
+              DESTROY_BY=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                           date -u -v+${TTL_HOURS}H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                           echo "")
+            else
+              DESTROY_BY="never"
+            fi
+            
+            echo "Tagging cluster with TTL metadata..."
+            aws eks tag-resource \
+              --resource-arn $(terraform output -raw cluster_arn) \
+              --tags "TTL_Hours=${TTL_HOURS},CreatedAt=${CREATED_AT},DestroyBy=${DESTROY_BY},CreatedBy=github-actions,RunId=${{ github.run_id }}"
+            
+            echo "### TTL Configuration 🕐" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **TTL:** ${TTL_HOURS} hours" >> $GITHUB_STEP_SUMMARY
+            echo "- **Created At:** ${CREATED_AT}" >> $GITHUB_STEP_SUMMARY
+            if [[ "$DESTROY_BY" != "never" ]]; then
+              echo "- **Auto-destroy By:** ${DESTROY_BY}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ⚠️ **Cost Protection:** This cluster will be automatically destroyed after ${TTL_HOURS} hours if not manually destroyed first." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **Auto-destroy:** Disabled (TTL=0)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ⚠️ **Warning:** Auto-destroy is disabled. Remember to manually destroy this cluster!" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
       - name: Output Cluster Info
         working-directory: ${{ env.WORKING_DIR }}
         run: |
           echo "## EKS Cluster Deployed! 🎉" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Cluster Details" >> $GITHUB_STEP_SUMMARY
-          echo "- **Name:** $(terraform output -raw cluster_name)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Endpoint:** $(terraform output -raw cluster_endpoint)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** $(terraform output -raw cluster_version)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Name:** $(terraform output -raw cluster_name 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Endpoint:** $(terraform output -raw cluster_endpoint 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $(terraform output -raw cluster_version 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Configure kubectl" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "$(terraform output -raw configure_kubectl)" >> $GITHUB_STEP_SUMMARY
+          echo "$(terraform output -raw configure_kubectl 2>/dev/null || echo 'aws eks update-kubeconfig --name <cluster-name> --region ap-southeast-2')" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
@@ -233,10 +321,8 @@ jobs:
   terraform-destroy:
     name: "Terraform Destroy"
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-
-    environment:
-      name: development-destroy
+    needs: determine-action
+    if: needs.determine-action.outputs.action == 'destroy'
 
     steps:
       - name: Checkout repository
@@ -271,3 +357,8 @@ jobs:
           echo "## EKS Cluster Destroyed 🗑️" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The development EKS cluster has been destroyed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Initiated by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

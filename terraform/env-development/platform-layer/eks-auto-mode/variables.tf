@@ -65,7 +65,7 @@ variable "az_count" {
     Cost impact: ~$32/month per additional NAT Gateway
   EOT
   type        = number
-  default     = 3
+  default     = 2
 
   validation {
     condition     = var.az_count >= 2 && var.az_count <= 3
@@ -79,12 +79,12 @@ variable "single_nat_gateway" {
     
     Considerations:
     - true:  Lower cost (~$32/month), single point of failure
-    - false: Higher cost (~$96/month for 3 AZs), highly available
+    - false: Higher cost (~$64/month for 2 AZs), highly available
     
     Recommendation: false for production path, true for dev/learning
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 # -----------------------------------------------------------------------------

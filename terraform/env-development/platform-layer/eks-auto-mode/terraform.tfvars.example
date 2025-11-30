@@ -19,10 +19,12 @@ owner       = "Platform-Team"
 vpc_cidr = "10.0.0.0/16"
 
 # Number of AZs: 2 (lower cost) or 3 (higher availability)
-az_count = 3
+# Cost optimisation: Using 2 AZs saves ~$32/month on NAT Gateway
+az_count = 2
 
-# Single NAT Gateway: true (lower cost ~$32/mo) or false (HA ~$96/mo for 3 AZs)
-single_nat_gateway = false
+# Single NAT Gateway: true (lower cost ~$32/mo) or false (HA ~$64/mo for 2 AZs)
+# Cost optimisation: Single NAT saves ~$32/month (acceptable for dev)
+single_nat_gateway = true
 
 # -----------------------------------------------------------------------------
 # EKS Configuration

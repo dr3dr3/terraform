@@ -13,7 +13,7 @@ tags = {
   Environment = "Management|Development|Staging|Production|Sandbox"
   ManagedBy   = "Terraform"
   Layer       = "foundation|platform|applications|experiments"
-  Owner       = "team-name|person-email"
+  Owner       = "team-name" # In most cases will be the "Platform-Team
 }
 ```
 

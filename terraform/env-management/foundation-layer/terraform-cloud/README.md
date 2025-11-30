@@ -7,9 +7,31 @@ This directory contains Terraform configuration to manage Terraform Cloud infras
 This configuration manages:
 
 - **Projects**: Organizational containers for grouping related workspaces
-- **Workspaces**: Individual Terraform state management units with VCS integration
-- **VCS Integration**: GitHub repository connection for automated runs
+- **Workspaces**: Individual Terraform state management units with configurable triggers
+- **Trigger Strategy**: CLI, VCS, or API/GitHub Actions triggers per ADR-014
 - **Workspace Settings**: Auto-apply, Terraform version, working directories
+
+## Workspace Trigger Strategy (ADR-014)
+
+Based on [ADR-014: Terraform Workspace Trigger Strategy](/workspace/docs/reference/architecture-decision-register/ADR-014-terraform-workspace-triggers.md), workspaces use different trigger mechanisms based on risk profile:
+
+| Workspace Layer | Trigger | Apply Mode | Rationale |
+|-----------------|---------|------------|-----------|
+| Foundation (all envs) | **CLI** | Manual | Maximum control for high-impact changes |
+| Application (dev) | API/GHA | Auto-apply | Fast iteration with automated lifecycle |
+| Application (staging) | **VCS** | Manual | Speculative plans on PRs, GitOps flow |
+| Application (prod) | API/GHA | Manual | CI/CD gates, audit trail, approvals |
+| Platform (dev) | API/GHA | Auto-apply | Ephemeral clusters, cost optimisation |
+| Platform (sandbox) | **VCS** | Auto-apply | Low-risk experimentation |
+| Platform (staging/prod) | API/GHA | Manual | Production-like controls |
+
+### Trigger Type Tags
+
+All workspaces include a `cicd:*` tag indicating the trigger type:
+
+- `cicd:cli` - CLI-driven workspaces (Foundation layer)
+- `cicd:vcs` - VCS-driven workspaces (staging apps, sandbox platform)
+- `cicd:github-actions` - API/GHA-driven workspaces (dev/prod platform/apps)
 
 ## Architecture
 
@@ -20,9 +42,10 @@ Based on [ADR-009: Folder Structure](/workspace/docs/reference/architecture-deci
 | Project | Purpose | Workspaces |
 |---------|---------|------------|
 | `aws-management` | Management account resources | IAM Identity Center, IAM roles, Terraform Cloud config |
-| `aws-development` | Development environment | Foundation layer, applications, EKS clusters |
+| `aws-development` | Development environment | Foundation layer, platform (EKS), applications |
+| `aws-staging` | Staging environment | Foundation layer, platform, applications |
+| `aws-production` | Production environment | Foundation layer, platform, applications |
 | `aws-sandbox` | Experimental resources | Testing, learning, experiments |
-| `local-development` | LocalStack resources | Local development with no AWS costs |
 
 ### Workspace Naming Convention
 
@@ -30,9 +53,9 @@ Format: `{environment}-{layer}-{stack-name}`
 
 Examples:
 
-- `management-foundation-iam-roles-for-people`
-- `development-applications-eks-learning-cluster`
-- `sandbox-foundation-iam-roles-terraform`
+- `management-foundation-iam-roles-for-people` (CLI-driven)
+- `development-platform-eks` (API/GHA-driven)
+- `sandbox-platform-eks` (VCS-driven)
 
 ## Prerequisites
 
@@ -181,32 +204,96 @@ Type `yes` to confirm. This will:
 ### Adding a New Workspace
 
 1. Edit `workspaces.tf`
-2. Add a new `tfe_workspace` resource following the existing pattern
-3. Run `terraform plan` and `terraform apply`
+2. Determine the correct trigger type per ADR-014:
+   - **Foundation layer** → CLI-driven (no VCS repo)
+   - **Platform/Application (dev)** → API/GHA-driven (no VCS repo)
+   - **Platform (sandbox)** → VCS-driven (with VCS repo)
+   - **Application (staging)** → VCS-driven (with VCS repo)
+3. Add the appropriate tags including `cicd:cli`, `cicd:vcs`, or `cicd:github-actions`
+4. Run `terraform plan` and `terraform apply`
 
-Example:
+Example CLI-driven workspace (Foundation):
 
 ```hcl
-resource "tfe_workspace" "dev_platform_networking" {
-  name         = "development-platform-networking"
+resource "tfe_workspace" "dev_foundation_networking" {
+  name         = "development-foundation-networking"
   organization = data.tfe_organization.main.name
   project_id   = tfe_project.aws_development.id
-  description  = "VPC and networking for development environment"
+  description  = "VPC and networking foundation for development environment"
 
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-development/foundation-layer/networking"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false  # Foundation requires manual approval
+
+  tag_names = [
+    "environment:development",
+    "layer:foundation",
+    "aws-account:development",
+    "managed-by:terraform",
+    "cicd:cli"  # ADR-014: CLI-driven trigger
+  ]
+}
+```
+
+Example VCS-driven workspace (Platform - Sandbox):
+
+```hcl
+resource "tfe_workspace" "sandbox_platform_networking" {
+  name         = "sandbox-platform-networking"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_sandbox.id
+  description  = "Platform networking for sandbox experimentation"
+
+  # VCS-driven: Automatic speculative plans on PRs
   vcs_repo {
     identifier     = local.vcs_repo.identifier
     oauth_token_id = local.vcs_repo.oauth_token_id
     branch         = local.vcs_repo.branch
   }
 
-  working_directory = "terraform/env-development/platform-layer/networking"
-  terraform_version = "~> 1.13.0"
-  auto_apply        = var.auto_apply_dev
+  trigger_prefixes = ["terraform/env-sandbox/platform-layer/networking"]
+
+  working_directory = "terraform/env-sandbox/platform-layer/networking"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_sandbox  # Auto-apply for experimentation
+
+  tag_names = [
+    "environment:sandbox",
+    "layer:platform",
+    "aws-account:sandbox",
+    "managed-by:terraform",
+    "cicd:vcs"  # ADR-014: VCS-driven trigger
+  ]
+}
+```
+
+Example API/GHA-driven workspace (Platform - Dev):
+
+```hcl
+resource "tfe_workspace" "dev_platform_database" {
+  name         = "development-platform-database"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_development.id
+  description  = "RDS database for development environment"
+
+  # API/GHA-driven: Triggered by GitHub Actions workflow
+  # vcs_repo block intentionally omitted
+
+  working_directory = "terraform/env-development/platform-layer/database"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = var.auto_apply_dev  # Auto-apply for fast iteration
+
+  queue_all_runs = false  # Allow external triggers
 
   tag_names = [
     "environment:development",
     "layer:platform",
-    "aws-account:development"
+    "aws-account:development",
+    "managed-by:terraform",
+    "cicd:github-actions"  # ADR-014: API/GHA-driven trigger
   ]
 }
 ```
@@ -236,16 +323,20 @@ resource "tfe_workspace_variable_set" "dev_foundation_iam_creds" {
 }
 ```
 
-## Auto-Apply Settings
+## Auto-Apply Settings (per ADR-014)
 
-Different environments have different auto-apply configurations:
+Different environments and layers have different auto-apply configurations:
 
-| Environment | Auto-Apply | Reason |
-|-------------|------------|--------|
-| Management | ❌ Disabled | Critical infrastructure, requires manual approval |
-| Development | ✅ Enabled | Fast iteration, safe to auto-apply |
-| Sandbox | ✅ Enabled | Experimental, safe to auto-apply |
-| Meta-Terraform | ❌ Disabled | Changes affect all workspaces, requires review |
+| Layer | Environment | Auto-Apply | Trigger | Reason |
+|-------|-------------|------------|---------|--------|
+| Foundation | All | ❌ Disabled | CLI | Critical infrastructure, requires manual approval |
+| Platform | Dev | ✅ Enabled | API/GHA | Fast iteration, scheduled create/destroy |
+| Platform | Sandbox | ✅ Enabled | VCS | Experimentation, auto-apply on merge |
+| Platform | Staging/Prod | ❌ Disabled | API/GHA | Production-like controls |
+| Application | Dev | ✅ Enabled | API/GHA | Fast iteration, safe to auto-apply |
+| Application | Staging | ❌ Disabled | VCS | Speculative plans, manual approval |
+| Application | Prod | ❌ Disabled | API/GHA | Requires human approval |
+| Meta-Terraform | - | ❌ Disabled | CLI | Changes affect all workspaces, requires review |
 
 ## Workspace Dependencies
 
@@ -311,7 +402,9 @@ After initial setup:
 
 ## References
 
+- [ADR-014: Terraform Workspace Trigger Strategy](/workspace/docs/reference/architecture-decision-register/ADR-014-terraform-workspace-triggers.md)
 - [ADR-009: Folder Structure](/workspace/docs/reference/architecture-decision-register/ADR-009-folder-structure.md)
+- [AWS Tagging Strategy](/workspace/docs/reference/aws-tagging-strategy.md)
 - [Terraform Cloud Projects Guide](/workspace/docs/explanations/terraform-cloud-projects.md)
 - [TFE Provider Documentation](https://registry.terraform.io/providers/hashicorp/tfe/latest/docs)
 - [Terraform Cloud VCS Integration](https://developer.hashicorp.com/terraform/cloud-docs/vcs)

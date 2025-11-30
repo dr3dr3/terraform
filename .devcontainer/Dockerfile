@@ -39,7 +39,7 @@ RUN echo https://downloads.1password.com/linux/alpinelinux/stable/ >> /etc/apk/r
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install git and configure user
-RUN apk add git && git config --global user.name "André Dreyer" && git config --global user.email "github@andredreyer.com"
+RUN apk add git github-cli && git config --global user.name "André Dreyer" && git config --global user.email "github@andredreyer.com"
 
 ENV SHELL=/usr/bin/fish
 

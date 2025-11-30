@@ -1,55 +1,72 @@
 # IAM Roles for People - IAM Identity Center Configuration
 
-This Terraform configuration creates IAM Identity Center (AWS SSO) groups and permission sets for human users accessing AWS accounts.
+This Terraform configuration creates IAM Identity Center (AWS SSO) groups and permission sets for human users accessing AWS accounts, with a focus on supporting EKS RBAC integration.
 
 ## Overview
 
-This module provisions three user groups with different permission levels:
+This module implements a 5-tier user persona model (see [ADR-015](../../../../docs/reference/architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md)) that maps AWS SSO groups to Kubernetes RBAC roles:
 
-1. **Administrators** - Full administrative access to all AWS resources
-2. **Platform Engineers** - Permissions focused on creating and managing EKS clusters and related infrastructure
-3. **ReadOnly** - Read-only access to all AWS resources
+| Persona | AWS SSO Group | K8s RBAC Role | Session Duration |
+|---------|---------------|---------------|------------------|
+| **Administrator** | Administrators | cluster-admin | 4 hours |
+| **Platform Engineer** | Platform-Engineers | cluster-admin | 8 hours |
+| **Namespace Admin** | Namespace-Admins | namespace-admin | 8 hours |
+| **Developer** | Developers | developer | 12 hours |
+| **Auditor** | Auditors | view | 12 hours |
 
 ## Architecture
 
-### Groups
+### User Personas and Permissions
 
-- `Administrators`: Full admin access using AWS managed `AdministratorAccess` policy
-- `Platform-Engineers`: Custom permissions for EKS cluster management and platform infrastructure
-- `ReadOnly`: Read-only access using AWS managed `ReadOnlyAccess` policy
+#### 1. Administrators
 
-### Permission Sets
+- **AWS Access**: Full administrative access (`AdministratorAccess` managed policy)
+- **K8s Access**: `cluster-admin` (system:masters group)
+- **Session**: 4 hours (shorter for high privilege)
+- **Account Access**: All accounts including management
+- **Use Case**: Platform owners, break-glass scenarios
 
-Each group has a corresponding permission set that defines what actions users in that group can perform:
+#### 2. Platform Engineers
 
-#### Administrator Access
+- **AWS Access**: EKS cluster management, VPC/networking, ECR, no IAM Identity management
+- **K8s Access**: `cluster-admin` (system:masters group)
+- **Session**: 8 hours (workday coverage)
+- **Account Access**: All environment accounts (not management)
+- **Use Case**: Building and managing Kubernetes clusters
 
-- AWS Managed Policy: `AdministratorAccess`
-- Session Duration: 8 hours
-- Use Case: Full administrative operations
+#### 3. Namespace Administrators
 
-#### Platform Engineer Access
+- **AWS Access**: EKS describe, ECR push/pull, CloudWatch logs, Secrets Manager read
+- **K8s Access**: `namespace-admin` (custom ClusterRole with full namespace control)
+- **Session**: 8 hours (workday coverage)
+- **Account Access**: Non-production only (dev, staging, sandbox)
+- **Use Case**: Team leads managing their team's Kubernetes namespace
 
-- Custom inline policy with permissions for:
-  - EKS cluster creation, deletion, and management
-  - EKS node group management
-  - EKS add-ons and Fargate profiles
-  - IAM roles and policies for EKS (with restricted naming)
-  - OIDC provider management for EKS IRSA
-  - VPC and networking resources for EKS
-  - Auto Scaling groups for node groups
-  - Load balancers and target groups
-  - CloudWatch logs for EKS
-  - KMS keys for EKS encryption
-  - EC2 instances and launch templates
-- Session Duration: 8 hours
-- Use Case: Creating and managing Kubernetes clusters and platform infrastructure
+#### 4. Developers
 
-#### ReadOnly Access
+- **AWS Access**: EKS describe, ECR push/pull, CloudWatch logs
+- **K8s Access**: `developer` (custom ClusterRole - deploy pods, limited secrets)
+- **Session**: 12 hours (convenience for development)
+- **Account Access**: Non-production only (dev, staging, sandbox)
+- **Use Case**: Day-to-day application deployment
 
-- AWS Managed Policy: `ReadOnlyAccess`
-- Session Duration: 12 hours
-- Use Case: Auditing, monitoring, and troubleshooting without modification rights
+#### 5. Auditors
+
+- **AWS Access**: Read-only + Cost Explorer + Security Hub
+- **K8s Access**: `view` (built-in ClusterRole - read-only)
+- **Session**: 12 hours (long read-only sessions)
+- **Account Access**: All accounts for compliance
+- **Use Case**: Compliance auditing and monitoring
+
+### Environment Access Matrix
+
+| Persona | Management | Sandbox | Dev | Staging | Production |
+|---------|:----------:|:-------:|:---:|:-------:|:----------:|
+| Administrator | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Platform Engineer | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Namespace Admin | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Developer | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Auditor | ❌ | ✅ | ✅ | ✅ | ✅ |
 
 ## Prerequisites
 
@@ -73,14 +90,24 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars`:
 
 ```hcl
-owner       = "your-email@example.com"
-cost_center = "engineering"
+owner       = "Platform-Team"
+environment = "Management"
+managed_by  = "Terraform"
+layer       = "Foundation"
 
-# Optional: Assign permission sets to additional accounts
+# All accounts - Administrators, Platform Engineers, and Auditors get access
 additional_account_ids = [
   "111111111111",  # Dev account
   "222222222222",  # Staging account
   "333333333333",  # Production account
+  "444444444444",  # Sandbox account
+]
+
+# Non-production only - Namespace Admins and Developers get access
+non_production_account_ids = [
+  "111111111111",  # Dev account
+  "222222222222",  # Staging account
+  "444444444444",  # Sandbox account
 ]
 ```
 
@@ -97,178 +124,156 @@ terraform plan
 terraform apply
 ```
 
-## Adding Users to Groups
+## EKS RBAC Integration
 
-After Terraform creates the groups, you need to add users to them:
+After creating the SSO groups, you need to configure EKS clusters to map SSO roles to Kubernetes RBAC. Add this to your EKS cluster's `aws-auth` ConfigMap:
 
-### Option 1: AWS Console
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-auth
+  namespace: kube-system
+data:
+  mapRoles: |
+    # Administrators - cluster-admin
+    - rolearn: arn:aws:iam::ACCOUNT:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_*
+      username: admin:{{SessionName}}
+      groups:
+        - system:masters
 
-1. Go to IAM Identity Center in the AWS Console
-2. Navigate to "Groups"
-3. Select a group (e.g., "Platform-Engineers")
-4. Click "Add users"
-5. Select users and click "Add users"
+    # Platform Engineers - cluster-admin
+    - rolearn: arn:aws:iam::ACCOUNT:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_PlatformEngineerAccess_*
+      username: platform:{{SessionName}}
+      groups:
+        - system:masters
 
-### Option 2: AWS CLI
+    # Namespace Admins - namespace-admin (custom ClusterRole)
+    - rolearn: arn:aws:iam::ACCOUNT:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_NamespaceAdminAccess_*
+      username: ns-admin:{{SessionName}}
+      groups:
+        - namespace-admins
+
+    # Developers - developer (custom ClusterRole)
+    - rolearn: arn:aws:iam::ACCOUNT:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_DeveloperAccess_*
+      username: dev:{{SessionName}}
+      groups:
+        - developers
+
+    # Auditors - view (built-in ClusterRole)
+    - rolearn: arn:aws:iam::ACCOUNT:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AuditorAccess_*
+      username: auditor:{{SessionName}}
+      groups:
+        - auditors
+```
+
+### Custom Kubernetes RBAC Resources
+
+Deploy these custom ClusterRoles for namespace-admin and developer personas:
+
+```yaml
+# Namespace Admin ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: namespace-admin
+rules:
+  - apiGroups: ["", "apps", "batch", "networking.k8s.io"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+# Developer ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: developer
+rules:
+  - apiGroups: ["", "apps", "batch"]
+    resources: ["pods", "deployments", "replicasets", "statefulsets", "jobs", "cronjobs", "services", "configmaps", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log", "pods/exec"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]  # Read-only secrets
+```
+
+## Adding Test Users
+
+For learning purposes, create test users in IAM Identity Center and add them to groups:
+
+| Username | Email | Groups |
+|----------|-------|--------|
+| admin-user | `admin@example.com` | Administrators |
+| platform-user | `platform@example.com` | Platform-Engineers |
+| ns-admin-user | `ns-admin@example.com` | Namespace-Admins |
+| dev-user | `developer@example.com` | Developers |
+| audit-user | `auditor@example.com` | Auditors |
+
+### Adding Users via AWS CLI
 
 ```bash
-# List available groups
-aws identitystore list-groups \
-  --identity-store-id $(terraform output -raw identity_store_id)
+# Get the Identity Store ID
+IDENTITY_STORE_ID=$(terraform output -raw identity_store_id)
 
-# Add a user to a group
+# Add a user to Developers group
 aws identitystore create-group-membership \
-  --identity-store-id $(terraform output -raw identity_store_id) \
-  --group-id $(terraform output -raw platform_engineers_group_id) \
+  --identity-store-id $IDENTITY_STORE_ID \
+  --group-id $(terraform output -raw developers_group_id) \
   --member-id UserId=<user-id>
 ```
 
-### Option 3: Terraform (Future Enhancement)
-
-You can extend this configuration to manage group memberships in Terraform using the `aws_identitystore_group_membership` resource.
-
-## Accessing AWS Accounts
-
-Once users are added to groups and permission sets are assigned:
-
-1. Users receive an email with their IAM Identity Center sign-in URL (e.g., `https://d-xxxxxxxxxx.awsapps.com/start`)
-2. Users log in with their credentials
-3. Users see tiles for all accounts they have access to
-4. Clicking an account shows available permission sets
-5. Users can access the AWS Console or get CLI credentials
-
-### AWS CLI Access
-
-```bash
-# Configure SSO profile
-aws configure sso
-# SSO session name: my-sso
-# SSO start URL: https://d-xxxxxxxxxx.awsapps.com/start
-# SSO region: us-east-1
-
-# Login
-aws sso login --profile <profile-name>
-
-# Use with Terraform
-export AWS_PROFILE=<profile-name>
-terraform plan
-```
-
-## Permission Set Details
-
-### Platform Engineer Permissions
-
-The Platform Engineer permission set includes comprehensive EKS-related permissions:
-
-- **EKS Operations**: Full cluster, node group, add-on, and Fargate profile management
-- **IAM**: Create and manage roles/policies with `eks-*` naming prefix
-- **OIDC**: Manage OIDC providers for EKS IRSA (IAM Roles for Service Accounts)
-- **Networking**: Create and manage VPCs, subnets, security groups, NAT gateways
-- **Compute**: Manage EC2 instances, launch templates, and Auto Scaling groups
-- **Load Balancing**: Create and manage ALB/NLB for EKS ingress
-- **Observability**: CloudWatch logs for EKS control plane and node groups
-- **Security**: KMS key management for EKS encryption
-- **Parameters**: Read SSM parameters for EKS AMIs and configurations
-
-### Security Considerations
-
-1. **Least Privilege**: Platform Engineers have focused permissions, not full admin
-2. **Resource Restrictions**: Many permissions are scoped to `eks-*` named resources
-3. **PassRole Protection**: IAM PassRole is restricted to EKS services only
-4. **Session Duration**: Shorter sessions for admin (8h) vs readonly (12h)
-5. **MFA Recommendation**: Enable MFA for all users, especially administrators
-
 ## Outputs
 
-After applying, the following outputs are available:
-
 ```bash
-terraform output sso_instance_arn              # IAM Identity Center instance ARN
-terraform output identity_store_id             # Identity Store ID
-terraform output admin_group_id                # Administrators group ID
-terraform output platform_engineers_group_id   # Platform Engineers group ID
-terraform output readonly_group_id             # ReadOnly group ID
-terraform output admin_permission_set_arn      # Admin permission set ARN
-terraform output platform_engineers_permission_set_arn  # Platform permission set ARN
-terraform output readonly_permission_set_arn   # ReadOnly permission set ARN
+# SSO Instance
+terraform output sso_instance_arn
+terraform output identity_store_id
+
+# Group IDs (for adding users)
+terraform output admin_group_id
+terraform output platform_engineers_group_id
+terraform output namespace_admins_group_id
+terraform output developers_group_id
+terraform output auditors_group_id
+
+# Permission Set ARNs (for EKS aws-auth mapping)
+terraform output admin_permission_set_arn
+terraform output platform_engineers_permission_set_arn
+terraform output namespace_admins_permission_set_arn
+terraform output developers_permission_set_arn
+terraform output auditors_permission_set_arn
+
+# Summary of all personas
+terraform output user_personas_summary
 ```
 
-## Assigning to Additional Accounts
+## Security Considerations
 
-To grant access to other accounts in your organization:
+1. **Least Privilege**: Each persona has minimum permissions needed for their role
+2. **Session Duration**: Higher privilege = shorter sessions (4hr admin vs 12hr developer)
+3. **Production Access**: Only Administrators, Platform Engineers, and Auditors can access production
+4. **Resource Restrictions**: Many permissions are scoped to `eks-*` named resources
+5. **PassRole Protection**: IAM PassRole is restricted to EKS services only
+6. **MFA Recommendation**: Enable MFA for all users, especially administrators
 
-1. Add account IDs to `additional_account_ids` variable
-2. Run `terraform apply`
-3. Permission sets will be assigned to those accounts automatically
+## Testing Access Levels
 
-Alternatively, assign manually in the AWS Console:
+After setup, test each persona by:
 
-1. IAM Identity Center → AWS accounts
-2. Select an account
-3. Click "Assign users or groups"
-4. Select a group and permission set
-5. Click "Submit"
-
-## Customization
-
-### Modifying Platform Engineer Permissions
-
-Edit `policies.tf` to adjust the `data.aws_iam_policy_document.platform_engineers` policy:
-
-```hcl
-# Add additional permissions
-statement {
-  sid    = "AdditionalService"
-  effect = "Allow"
-  actions = [
-    "service:Action",
-  ]
-  resources = ["*"]
-}
-```
-
-### Adding New Groups
-
-Add new groups and permission sets in `main.tf`:
-
-```hcl
-resource "aws_identitystore_group" "new_group" {
-  identity_store_id = local.identity_store_id
-  display_name      = "NewGroup"
-  description       = "Description of the new group"
-}
-
-resource "aws_ssoadmin_permission_set" "new_group" {
-  name             = "NewGroupAccess"
-  description      = "Custom permissions for new group"
-  instance_arn     = local.sso_instance_arn
-  session_duration = "PT8H"
-}
-```
-
-## Troubleshooting
-
-### Error: "Identity Center not enabled"
-
-Ensure IAM Identity Center is enabled in your management account:
-
-```bash
-aws sso-admin list-instances
-```
-
-### Error: "Access denied"
-
-Ensure you're running Terraform with credentials that have permissions to manage IAM Identity Center resources in the management account.
-
-### Users not seeing accounts
-
-1. Verify permission sets are assigned to accounts
-2. Check that users are members of the groups
-3. Ensure IAM Identity Center is properly synced
+1. **Administrator Test**: Create IAM role, deploy EKS cluster, access any K8s resource
+2. **Platform Engineer Test**: Deploy EKS cluster, cannot modify IAM, full K8s access
+3. **Namespace Admin Test**: Full control within assigned namespace, no cluster resources
+4. **Developer Test**: Deploy pods, cannot access secrets directly, can view logs
+5. **Auditor Test**: Read-only access to all resources, cannot modify anything
 
 ## References
 
+- [ADR-015: User Personas for AWS SSO and EKS RBAC](../../../../docs/reference/architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md)
 - [IAM Identity Center Documentation](https://docs.aws.amazon.com/singlesignon/latest/userguide/what-is.html)
-- [EKS IAM Roles](https://docs.aws.amazon.com/eks/latest/userguide/security-iam.html)
-- [AWS Organizations](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_introduction.html)
-- [Terraform AWS Provider - SSO Admin](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssoadmin_permission_set)
+- [EKS User Guide - IAM Identity Mapping](https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html)
+- [Kubernetes RBAC Documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)

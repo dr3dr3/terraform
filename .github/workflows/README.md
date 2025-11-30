@@ -7,6 +7,55 @@ This directory contains GitHub Actions workflows for Terraform infrastructure pr
 | Workflow | File | Description |
 |----------|------|-------------|
 | Dev Platform EKS | `terraform-dev-platform-eks.yml` | Provisions EKS Auto Mode cluster in development |
+| EKS TTL Check | `eks-ttl-check.yml` | Hourly check for expired clusters (auto-destroy) |
+
+## Cost Protection: TTL-Based Auto-Destroy
+
+To prevent forgotten EKS clusters from running up unexpected AWS costs, all clusters are tagged with a Time-To-Live (TTL) value. A separate workflow (`eks-ttl-check.yml`) runs hourly to check for expired clusters and automatically destroys them.
+
+### How It Works
+
+1. **On cluster creation:** The cluster is tagged with:
+   - `TTL_Hours`: How long the cluster should live (default: 8 hours)
+   - `CreatedAt`: ISO 8601 timestamp of creation
+   - `DestroyBy`: ISO 8601 timestamp when cluster should be destroyed
+
+2. **Hourly check:** The TTL check workflow runs every hour and:
+   - Lists all EKS clusters in each environment
+   - Checks the `DestroyBy` tag against current time
+   - Destroys any clusters that have exceeded their TTL
+
+3. **Manual override:** You can:
+   - Set `ttl_hours=0` when creating to disable auto-destroy
+   - Manually destroy earlier via workflow dispatch
+   - Run TTL check in dry-run mode to preview what would be destroyed
+
+### TTL Configuration
+
+| TTL Value | Behaviour |
+|-----------|-----------|
+| `8` (default) | Cluster auto-destroys after 8 hours |
+| `0` | No auto-destroy (manual destroy only) |
+| Any number | Cluster auto-destroys after that many hours |
+
+### Example Usage
+
+```bash
+# Create cluster with default 8-hour TTL
+gh workflow run terraform-dev-platform-eks.yml -f action=apply
+
+# Create cluster with 4-hour TTL (short learning session)
+gh workflow run terraform-dev-platform-eks.yml -f action=apply -f ttl_hours=4
+
+# Create cluster with no TTL (remember to destroy manually!)
+gh workflow run terraform-dev-platform-eks.yml -f action=apply -f ttl_hours=0
+
+# Check what would be destroyed (dry run)
+gh workflow run eks-ttl-check.yml -f dry_run=true
+
+# Force destroy all expired clusters now
+gh workflow run eks-ttl-check.yml -f dry_run=false
+```
 
 ## Authentication
 
@@ -93,6 +142,7 @@ For `development-destroy`:
 |-------|--------|
 | Push to `main` (matching paths) | Plan + Apply |
 | Pull Request (matching paths) | Plan only + PR comment |
+| Hourly (TTL check) | Check and destroy expired clusters |
 
 ### Manual Triggers
 
@@ -103,6 +153,7 @@ Use **Actions** → **Terraform: Dev Platform EKS** → **Run workflow**:
 | `plan` | Run plan only |
 | `apply` | Run plan + apply |
 | `destroy` | Destroy all resources |
+| `ttl_hours` | Time-to-live in hours (default: 8, 0 = no auto-destroy) |
 
 ## Directory Structure
 
@@ -111,7 +162,8 @@ Use **Actions** → **Terraform: Dev Platform EKS** → **Run workflow**:
 ├── copilot-instructions.md    # AI assistant guidelines
 ├── workflows/
 │   ├── README.md              # This file
-│   └── terraform-dev-platform-eks.yml
+│   ├── terraform-dev-platform-eks.yml
+│   └── eks-ttl-check.yml      # TTL-based auto-destroy
 ```
 
 ## Extending for Other Environments

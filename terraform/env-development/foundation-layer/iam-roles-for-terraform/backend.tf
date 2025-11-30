@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.13.0"
+  required_version = ">= 1.14.0"
 
   required_providers {
     aws = {
@@ -10,25 +10,26 @@ terraform {
 
   # Terraform Cloud backend configuration
   cloud {
-    organization = "Datafaced" # Replace with your Terraform Cloud organization name
+    organization = "Datafaced"
 
     workspaces {
-      name = "management-foundation-iam-roles-for-terraform"
+      name = "development-foundation-iam-roles"
     }
   }
 }
 
 # AWS Provider configuration
 # Uses dynamic credentials from Terraform Cloud OIDC
+# NOTE: This workspace runs in the DEVELOPMENT account (126350206316)
 provider "aws" {
   region = var.aws_region
 
   default_tags {
     tags = {
-      Environment = "management"
-      Layer       = "foundation"
+      Environment = "Development"
+      Layer       = "Foundation"
       ManagedBy   = "Terraform"
-      Workspace   = "management-foundation-iam-roles-for-terraform"
+      Workspace   = "development-foundation-iam-roles"
     }
   }
 }

@@ -1,4 +1,13 @@
-# IAM Policy for Platform Engineers - EKS focused permissions
+# IAM Policy Documents for AWS SSO Permission Sets
+# Each persona gets a tailored policy following the principle of least privilege
+# See ADR-015 for the complete user persona strategy
+
+###############################################################################
+# PLATFORM ENGINEERS POLICY
+# Full EKS cluster management + VPC/networking + supporting services
+# NO IAM management (prevents privilege escalation)
+###############################################################################
+
 data "aws_iam_policy_document" "platform_engineers" {
   # EKS Cluster Management
   statement {
@@ -14,6 +23,18 @@ data "aws_iam_policy_document" "platform_engineers" {
       "eks:TagResource",
       "eks:UntagResource",
       "eks:ListTagsForResource",
+      "eks:AccessKubernetesApi",
+      "eks:AssociateAccessPolicy",
+      "eks:AssociateIdentityProviderConfig",
+      "eks:CreateAccessEntry",
+      "eks:DeleteAccessEntry",
+      "eks:DescribeAccessEntry",
+      "eks:DisassociateAccessPolicy",
+      "eks:DisassociateIdentityProviderConfig",
+      "eks:ListAccessEntries",
+      "eks:ListAccessPolicies",
+      "eks:ListAssociatedAccessPolicies",
+      "eks:UpdateAccessEntry",
     ]
     resources = ["*"]
   }
@@ -61,7 +82,7 @@ data "aws_iam_policy_document" "platform_engineers" {
     resources = ["*"]
   }
 
-  # IAM Roles for EKS
+  # IAM Roles for EKS (scoped to eks-* pattern)
   statement {
     sid    = "IAMRoleManagementForEKS"
     effect = "Allow"
@@ -91,7 +112,7 @@ data "aws_iam_policy_document" "platform_engineers" {
     ]
   }
 
-  # IAM Policy Management for EKS
+  # IAM Policy Management for EKS (scoped to eks-* pattern)
   statement {
     sid    = "IAMPolicyManagementForEKS"
     effect = "Allow"
@@ -256,6 +277,8 @@ data "aws_iam_policy_document" "platform_engineers" {
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
       "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
       "logs:PutRetentionPolicy",
       "logs:TagLogGroup",
       "logs:UntagLogGroup",
@@ -315,6 +338,45 @@ data "aws_iam_policy_document" "platform_engineers" {
     resources = ["*"]
   }
 
+  # ECR for Container Images
+  statement {
+    sid    = "ECRManagement"
+    effect = "Allow"
+    actions = [
+      "ecr:CreateRepository",
+      "ecr:DeleteRepository",
+      "ecr:DescribeRepositories",
+      "ecr:GetRepositoryPolicy",
+      "ecr:SetRepositoryPolicy",
+      "ecr:DeleteRepositoryPolicy",
+      "ecr:ListImages",
+      "ecr:DescribeImages",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:GetAuthorizationToken",
+      "ecr:TagResource",
+      "ecr:UntagResource",
+    ]
+    resources = ["*"]
+  }
+
+  # Secrets Manager Read Access
+  statement {
+    sid    = "SecretsManagerRead"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecrets",
+    ]
+    resources = ["*"]
+  }
+
   # Systems Manager Parameter Store for EKS
   statement {
     sid    = "SSMParameterStoreForEKS"
@@ -339,6 +401,280 @@ data "aws_iam_policy_document" "platform_engineers" {
       "cloudformation:ListStacks",
       "s3:ListAllMyBuckets",
       "s3:GetBucketLocation",
+      "s3:GetObject",
+      "s3:ListBucket",
+    ]
+    resources = ["*"]
+  }
+}
+
+###############################################################################
+# NAMESPACE ADMINS POLICY
+# EKS describe + ECR push/pull + CloudWatch logs + Secrets Manager read
+# NO cluster creation/deletion, NO VPC/networking
+###############################################################################
+
+data "aws_iam_policy_document" "namespace_admins" {
+  # EKS Read/Describe Access (no create/delete cluster)
+  statement {
+    sid    = "EKSDescribeAccess"
+    effect = "Allow"
+    actions = [
+      "eks:DescribeCluster",
+      "eks:ListClusters",
+      "eks:ListNodegroups",
+      "eks:DescribeNodegroup",
+      "eks:ListAddons",
+      "eks:DescribeAddon",
+      "eks:ListFargateProfiles",
+      "eks:DescribeFargateProfile",
+      "eks:ListTagsForResource",
+      "eks:AccessKubernetesApi",
+    ]
+    resources = ["*"]
+  }
+
+  # ECR Push/Pull for Container Images
+  statement {
+    sid    = "ECRPushPull"
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken",
+      "ecr:DescribeRepositories",
+      "ecr:ListImages",
+      "ecr:DescribeImages",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+    ]
+    resources = ["*"]
+  }
+
+  # CloudWatch Logs - Read access for troubleshooting
+  statement {
+    sid    = "CloudWatchLogsRead"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
+      "logs:FilterLogEvents",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:logs:*:*:log-group:/aws/eks/*",
+      "arn:${data.aws_partition.current.partition}:logs:*:*:log-group:/aws/containerinsights/*",
+    ]
+  }
+
+  # Secrets Manager Read Access
+  statement {
+    sid    = "SecretsManagerRead"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecrets",
+    ]
+    resources = ["*"]
+  }
+
+  # S3 Read Access for application configs
+  statement {
+    sid    = "S3ReadAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:ListAllMyBuckets",
+    ]
+    resources = ["*"]
+  }
+
+  # Basic identity and context
+  statement {
+    sid    = "BasicReadAccess"
+    effect = "Allow"
+    actions = [
+      "sts:GetCallerIdentity",
+      "ec2:DescribeVpcs",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+    ]
+    resources = ["*"]
+  }
+}
+
+###############################################################################
+# DEVELOPERS POLICY
+# EKS describe + ECR push/pull + CloudWatch logs
+# NO secrets write, NO infrastructure changes
+###############################################################################
+
+data "aws_iam_policy_document" "developers" {
+  # EKS Read/Describe Access
+  statement {
+    sid    = "EKSDescribeAccess"
+    effect = "Allow"
+    actions = [
+      "eks:DescribeCluster",
+      "eks:ListClusters",
+      "eks:ListNodegroups",
+      "eks:DescribeNodegroup",
+      "eks:ListAddons",
+      "eks:DescribeAddon",
+      "eks:ListTagsForResource",
+      "eks:AccessKubernetesApi",
+    ]
+    resources = ["*"]
+  }
+
+  # ECR Push/Pull for Container Images
+  statement {
+    sid    = "ECRPushPull"
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken",
+      "ecr:DescribeRepositories",
+      "ecr:ListImages",
+      "ecr:DescribeImages",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+    ]
+    resources = ["*"]
+  }
+
+  # CloudWatch Logs - Read access for troubleshooting
+  statement {
+    sid    = "CloudWatchLogsRead"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:GetLogEvents",
+      "logs:FilterLogEvents",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:logs:*:*:log-group:/aws/eks/*",
+      "arn:${data.aws_partition.current.partition}:logs:*:*:log-group:/aws/containerinsights/*",
+    ]
+  }
+
+  # S3 Read Access for application data
+  statement {
+    sid    = "S3ReadAccess"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:ListAllMyBuckets",
+    ]
+    resources = ["*"]
+  }
+
+  # Secrets Manager - List only (actual secrets accessed via K8s)
+  statement {
+    sid    = "SecretsManagerList"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:ListSecrets",
+      "secretsmanager:DescribeSecret",
+    ]
+    resources = ["*"]
+  }
+
+  # Basic identity and context
+  statement {
+    sid    = "BasicReadAccess"
+    effect = "Allow"
+    actions = [
+      "sts:GetCallerIdentity",
+      "ec2:DescribeVpcs",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeSecurityGroups",
+    ]
+    resources = ["*"]
+  }
+}
+
+###############################################################################
+# AUDITORS POLICY
+# Cost Explorer access (not in ReadOnlyAccess managed policy)
+# Security-focused read access
+###############################################################################
+
+data "aws_iam_policy_document" "auditors" {
+  # Cost Explorer Access (not included in ReadOnlyAccess)
+  statement {
+    sid    = "CostExplorerAccess"
+    effect = "Allow"
+    actions = [
+      "ce:GetCostAndUsage",
+      "ce:GetCostForecast",
+      "ce:GetDimensionValues",
+      "ce:GetReservationUtilization",
+      "ce:GetSavingsPlansUtilization",
+      "ce:GetTags",
+      "ce:GetUsageForecast",
+    ]
+    resources = ["*"]
+  }
+
+  # Budgets Access
+  statement {
+    sid    = "BudgetsAccess"
+    effect = "Allow"
+    actions = [
+      "budgets:ViewBudget",
+      "budgets:DescribeBudget",
+      "budgets:DescribeBudgets",
+    ]
+    resources = ["*"]
+  }
+
+  # Security Hub Access
+  statement {
+    sid    = "SecurityHubAccess"
+    effect = "Allow"
+    actions = [
+      "securityhub:GetFindings",
+      "securityhub:GetInsights",
+      "securityhub:DescribeHub",
+    ]
+    resources = ["*"]
+  }
+
+  # CloudTrail Access for audit logs
+  statement {
+    sid    = "CloudTrailAccess"
+    effect = "Allow"
+    actions = [
+      "cloudtrail:LookupEvents",
+      "cloudtrail:GetTrail",
+      "cloudtrail:DescribeTrails",
+      "cloudtrail:GetEventSelectors",
+    ]
+    resources = ["*"]
+  }
+
+  # IAM Access Analyzer
+  statement {
+    sid    = "IAMAccessAnalyzer"
+    effect = "Allow"
+    actions = [
+      "access-analyzer:GetFinding",
+      "access-analyzer:ListFindings",
+      "access-analyzer:ListAnalyzers",
     ]
     resources = ["*"]
   }

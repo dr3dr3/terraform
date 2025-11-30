@@ -113,7 +113,10 @@ resource "aws_iam_role_policy" "terraform_cloud_oidc" {
           "iam:ListAttachedRolePolicies",
           "iam:AttachRolePolicy",
           "iam:DetachRolePolicy",
-          "iam:PassRole"
+          "iam:PassRole",
+          # Required for role deletion - must check/remove instance profiles first
+          "iam:ListInstanceProfilesForRole",
+          "iam:RemoveRoleFromInstanceProfile"
         ]
         Resource = [
           # Bootstrap OIDC role (self-management)

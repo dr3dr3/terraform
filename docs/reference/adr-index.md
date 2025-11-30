@@ -22,6 +22,7 @@
 | [ADR-010](./architecture-decision-register/ADR-010-aws-aim-role-structure.md) | AWS IAM Role Structure for Terraform OIDC Authentication | Tiered IAM role structure based on environment separation | Approved | 2025-11-02 |
 | [ADR-011](./architecture-decision-register/ADR-011-sandbox-environment.md) | Sandbox Environment for Testing and Experimentation | Dedicated AWS account with standard layers + experiments layer | Approved | 2025-11-17 |
 | [ADR-012](./architecture-decision-register/ADR-012-sandbox-automated-cleanup.md) | Automated Resource Cleanup for Sandbox Environment | Hybrid: Terraform Destroy + AWS Nuke v3 | Proposed | 2024-11-24 |
+| [ADR-015](./architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md) | User Personas for AWS SSO and EKS RBAC | 5-tier persona model with least privilege | Approved | 2025-11-29 |
 
 ## Superseded Decisions
 
@@ -76,6 +77,13 @@ When working with this codebase, follow decisions in Active ADRs:
 - **OIDC IAM Roles**: Environment-based tiered structure (`terraform-{env}-role` pattern, optionally split by execution context: `terraform-{env}-cicd-role` vs `terraform-{env}-human-role`)
 - **IAM Identity Center**: Used for human AWS Console/CLI access, separate from OIDC roles for Terraform
 - **Permission separation**: OIDC roles for Terraform automation, Permission Sets for human access
+- **User Personas** (ADR-015): 5-tier model mapping AWS SSO to EKS RBAC:
+  - **Administrator**: Full AWS + K8s cluster-admin (4hr session)
+  - **Platform Engineer**: EKS/VPC management + K8s cluster-admin (8hr session)
+  - **Namespace Admin**: EKS describe + K8s namespace-admin (8hr session)
+  - **Developer**: EKS describe + ECR + K8s developer role (12hr session)
+  - **Auditor**: Read-only + Cost Explorer + K8s view role (12hr session)
+- **Production Access**: Only Administrators, Platform Engineers, and Auditors can access production
 - **Authorization**: Environment-scoped IAM policies prevent cross-environment access
 - **GitHub Actions**: Read-only Secrets Manager access, cannot write/create secrets
 - **KMS permissions**: Requires both IAM and KMS permissions to decrypt secrets
