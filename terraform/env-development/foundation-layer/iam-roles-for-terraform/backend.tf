@@ -13,7 +13,7 @@ terraform {
     organization = "Datafaced"
 
     workspaces {
-      name = "development-foundation-iam-roles"
+      name = "development-foundation-iam-roles-for-terraform"
     }
   }
 }

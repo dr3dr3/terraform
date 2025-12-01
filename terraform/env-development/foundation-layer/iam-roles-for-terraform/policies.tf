@@ -133,6 +133,8 @@ data "aws_iam_policy_document" "platform_permissions" {
       "ec2:DescribeNatGateways",
       "ec2:AllocateAddress",
       "ec2:ReleaseAddress",
+      "ec2:AssociateAddress",
+      "ec2:DisassociateAddress",
       "ec2:DescribeAddresses",
       "ec2:CreateRouteTable",
       "ec2:DeleteRouteTable",

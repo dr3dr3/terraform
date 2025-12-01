@@ -46,18 +46,28 @@ output "workspace_management_gha_oidc_id" {
   value       = tfe_workspace.management_foundation_gha_oidc.id
 }
 
+output "workspace_management_github_dr3dr3_id" {
+  description = "ID of management-foundation-github-dr3dr3 workspace"
+  value       = tfe_workspace.management_foundation_github_dr3dr3.id
+}
+
+output "workspace_management_github_dr3dr3_name" {
+  description = "Name of management-foundation-github-dr3dr3 workspace"
+  value       = tfe_workspace.management_foundation_github_dr3dr3.name
+}
+
 ################################################################################
 # Development Workspace Outputs
 ################################################################################
 
-output "workspace_dev_foundation_iam_roles_id" {
-  description = "ID of development-foundation-iam-roles workspace"
-  value       = tfe_workspace.dev_foundation_iam_roles.id
+output "workspace_dev_foundation_iam_roles_terraform_id" {
+  description = "ID of development-foundation-iam-roles-for-terraform workspace"
+  value       = tfe_workspace.dev_foundation_iam_roles_terraform.id
 }
 
-output "workspace_dev_foundation_iam_roles_name" {
-  description = "Name of development-foundation-iam-roles workspace"
-  value       = tfe_workspace.dev_foundation_iam_roles.name
+output "workspace_dev_foundation_iam_roles_terraform_name" {
+  description = "Name of development-foundation-iam-roles-for-terraform workspace"
+  value       = tfe_workspace.dev_foundation_iam_roles_terraform.name
 }
 
 output "workspace_dev_platform_eks_id" {
@@ -129,8 +139,9 @@ output "workspace_count" {
     tfe_workspace.management_foundation_tfc_oidc_role.id,
     tfe_workspace.management_foundation_iam_people.id,
     tfe_workspace.management_foundation_gha_oidc.id,
+    tfe_workspace.management_foundation_github_dr3dr3.id,
     # Development workspaces
-    tfe_workspace.dev_foundation_iam_roles.id,
+    tfe_workspace.dev_foundation_iam_roles_terraform.id,
     tfe_workspace.dev_foundation_gha_oidc.id,
     tfe_workspace.dev_platform_eks.id,
     # Staging workspaces
@@ -158,7 +169,8 @@ output "workspace_trigger_summary" {
       tfe_workspace.management_foundation_tfc_oidc_role.name,
       tfe_workspace.management_foundation_iam_people.name,
       tfe_workspace.management_foundation_gha_oidc.name,
-      tfe_workspace.dev_foundation_iam_roles.name,
+      tfe_workspace.management_foundation_github_dr3dr3.name,
+      tfe_workspace.dev_foundation_iam_roles_terraform.name,
       tfe_workspace.dev_foundation_gha_oidc.name,
       tfe_workspace.staging_foundation_iam_roles.name,
       tfe_workspace.sandbox_foundation_iam_roles.name,
