@@ -27,6 +27,9 @@ resource "aws_eks_cluster" "main" {
   version  = var.kubernetes_version
   role_arn = aws_iam_role.eks_cluster.arn
 
+  # When EKS Auto Mode is enabled, self-managed addons must be disabled
+  bootstrap_self_managed_addons = false
+
   # VPC configuration
   vpc_config {
     subnet_ids              = concat(aws_subnet.private[*].id, aws_subnet.public[*].id)
@@ -60,7 +63,7 @@ resource "aws_eks_cluster" "main" {
   # Storage configuration for Auto Mode
   storage_config {
     block_storage {
-      enabled = true
+      enabled = var.auto_mode_enabled
     }
   }
 
@@ -68,6 +71,11 @@ resource "aws_eks_cluster" "main" {
   kubernetes_network_config {
     ip_family         = "ipv4"
     service_ipv4_cidr = "172.20.0.0/16"
+
+    # Elastic Load Balancing for Auto Mode
+    elastic_load_balancing {
+      enabled = var.auto_mode_enabled
+    }
   }
 
   # Access configuration - use API for access management

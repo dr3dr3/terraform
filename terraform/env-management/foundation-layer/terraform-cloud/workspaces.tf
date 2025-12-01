@@ -22,11 +22,11 @@ resource "tfe_workspace" "management_foundation_tfc_oidc_role" {
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "management"
-    layer        = "foundation"
-    aws-account  = "management"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
+    Environment = "Management"
+    Layer       = "Foundation"
+    AwsAccount  = "Management"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -49,11 +49,11 @@ resource "tfe_workspace" "management_foundation_iam_people" {
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "management"
-    layer        = "foundation"
-    aws-account  = "management"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
+    Environment = "Management"
+    Layer       = "Foundation"
+    AwsAccount  = "Management"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -90,16 +90,16 @@ resource "tfe_workspace" "management_foundation_gha_oidc" {
   # CLI-driven: No VCS repo - operators explicitly initiate changes
   # vcs_repo block intentionally omitted per ADR-014
 
-  working_directory = "terraform/env-management/foundation-layer/github-actions-oidc-role"
+  working_directory = "terraform/env-management/foundation-layer/gha-oidc"
   terraform_version = "~> 1.14.0"
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "management"
-    layer        = "foundation"
-    aws-account  = "management"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
+    Environment = "Management"
+    Layer       = "Foundation"
+    AwsAccount  = "Management"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -119,6 +119,34 @@ resource "tfe_variable" "management_foundation_gha_oidc_role_arn" {
   category     = "env"
   description  = "AWS IAM role ARN for OIDC authentication"
 }
+
+# Management - Foundation Layer - GitHub Repositories (dr3dr3)
+# ADR-014: CLI-driven, Manual apply
+# Manages GitHub repositories for dr3dr3 - settings, branch protection, and environments
+resource "tfe_workspace" "management_foundation_github_dr3dr3" {
+  name         = "management-foundation-github-dr3dr3"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_management.id
+  description  = "GitHub repositories management for dr3dr3 - settings, branch protection, environments, and secrets"
+
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-management/foundation-layer/github-dr3dr3"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Foundation requires manual approval
+
+  tags = {
+    Environment = "Management"
+    Layer       = "Foundation"
+    AwsAccount  = "Management"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+  }
+}
+
+# Note: GITHUB_TOKEN environment variable should be set manually in TFC
+# This token requires repo, admin:repo_hook, and workflow scopes
 
 ################################################################################
 # Development Environment Workspaces
@@ -151,12 +179,12 @@ resource "tfe_workspace" "dev_platform_eks" {
   queue_all_runs = false
 
   tags = {
-    environment  = "development"
-    layer        = "platform"
-    aws-account  = "development"
-    managed-by   = "terraform"
-    cicd         = "github-actions" # ADR-014: API/GHA-driven trigger
-    workload     = "eks"
+    Environment = "Development"
+    Layer       = "Platform"
+    AwsAccount  = "Development"
+    ManagedBy   = "Terraform"
+    Cicd        = "Github-Actions" # ADR-014: API/GHA-driven trigger
+    Workload    = "Eks"
   }
 }
 
@@ -176,34 +204,43 @@ resource "tfe_workspace" "dev_foundation_gha_oidc" {
   # CLI-driven: No VCS repo - operators explicitly initiate changes
   # vcs_repo block intentionally omitted per ADR-014
 
-  working_directory = "terraform/env-development/foundation-layer/github-actions-oidc-role"
+  working_directory = "terraform/env-development/foundation-layer/gha-oidc"
   terraform_version = "~> 1.14.0"
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "development"
-    layer        = "foundation"
-    aws-account  = "development"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
-    bootstrap    = "true"
+    Environment = "Development"
+    Layer       = "Foundation"
+    AwsAccount  = "Development"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    Bootstrap   = "True"
   }
 }
 
-# NOTE: OIDC variables for dev_foundation_gha_oidc workspace require a role
-# in the DEVELOPMENT AWS account. This is a bootstrap step that needs to be
-# configured manually in Terraform Cloud with development account credentials.
-# Options:
-# 1. Use AWS access keys for the development account (temporary, for bootstrap)
-# 2. Create a cross-account role from management to development
-# 3. Run locally with development account credentials first
+# OIDC variables for dev_foundation_gha_oidc - bootstrapped
+resource "tfe_variable" "dev_foundation_gha_oidc_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.dev_foundation_gha_oidc.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "dev_foundation_gha_oidc_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::126350206316:role/terraform-dev-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.dev_foundation_gha_oidc.id
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
 
 # Development - Foundation Layer - IAM Roles for Terraform
 # ADR-014: CLI-driven, Manual apply (Foundation layer = CLI)
 # Creates OIDC provider and layer-specific IAM roles in the development account
 # IMPORTANT: Bootstrap step - requires initial dev account credentials
-resource "tfe_workspace" "dev_foundation_iam_roles" {
-  name         = "development-foundation-iam-roles"
+resource "tfe_workspace" "dev_foundation_iam_roles_terraform" {
+  name         = "development-foundation-iam-roles-for-terraform"
   organization = data.tfe_organization.main.name
   project_id   = tfe_project.aws_development.id
   description  = "OIDC provider and IAM roles for Terraform Cloud in development account"
@@ -216,19 +253,31 @@ resource "tfe_workspace" "dev_foundation_iam_roles" {
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "development"
-    layer        = "foundation"
-    aws-account  = "development"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
-    bootstrap    = "true"
+    Environment = "Development"
+    Layer       = "Foundation"
+    AwsAccount  = "Development"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    Bootstrap   = "True"
   }
 }
 
-# NOTE: OIDC variables for dev_foundation_iam_roles require bootstrapping.
-# After initial apply, configure:
-#   TFC_AWS_PROVIDER_AUTH = "true"
-#   TFC_AWS_RUN_ROLE_ARN  = "arn:aws:iam::126350206316:role/terraform-dev-foundation-cicd-role"
+# OIDC variables for dev_foundation_iam_roles_terraform - bootstrapped
+resource "tfe_variable" "dev_foundation_iam_roles_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.dev_foundation_iam_roles_terraform.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "dev_foundation_iam_roles_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::126350206316:role/terraform-dev-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.dev_foundation_iam_roles_terraform.id
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
 
 ################################################################################
 # Staging Environment Workspaces
@@ -257,11 +306,11 @@ resource "tfe_workspace" "staging_foundation_iam_roles" {
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "staging"
-    layer        = "foundation"
-    aws-account  = "staging"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
+    Environment = "Staging"
+    Layer       = "Foundation"
+    AwsAccount  = "Staging"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -292,11 +341,11 @@ resource "tfe_workspace" "sandbox_foundation_iam_roles" {
   auto_apply        = false # Foundation requires manual approval
 
   tags = {
-    environment  = "sandbox"
-    layer        = "foundation"
-    aws-account  = "sandbox"
-    managed-by   = "terraform"
-    cicd         = "cli" # ADR-014: CLI-driven trigger
+    Environment = "Sandbox"
+    Layer       = "Foundation"
+    AwsAccount  = "Sandbox"
+    ManagedBy   = "Terraform"
+    Cicd        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -323,12 +372,12 @@ resource "tfe_workspace" "sandbox_platform_eks" {
   auto_apply        = var.auto_apply_sandbox # Auto-apply for fast experimentation
 
   tags = {
-    environment  = "sandbox"
-    layer        = "platform"
-    aws-account  = "sandbox"
-    managed-by   = "terraform"
-    cicd         = "vcs" # ADR-014: VCS-driven trigger
-    workload     = "eks"
+    Environment = "Sandbox"
+    Layer       = "Platform"
+    AwsAccount  = "Sandbox"
+    ManagedBy   = "Terraform"
+    Cicd        = "Vcs" # ADR-014: VCS-driven trigger
+    Workload    = "Eks"
   }
 }
 

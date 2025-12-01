@@ -20,7 +20,7 @@ To prevent forgotten EKS clusters from running up unexpected AWS costs, all clus
    - `CreatedAt`: ISO 8601 timestamp of creation
    - `DestroyBy`: ISO 8601 timestamp when cluster should be destroyed
 
-2. **Hourly check:** The TTL check workflow runs every hour and:
+2. **Hourly check:** The TTL check workflow runs every 6 hours and:
    - Lists all EKS clusters in each environment
    - Checks the `DestroyBy` tag against current time
    - Destroys any clusters that have exceeded their TTL

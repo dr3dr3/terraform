@@ -28,12 +28,14 @@ data "aws_iam_policy_document" "github_actions_dev_platform_permissions" {
       "iam:CreateRole",
       "iam:DeleteRole",
       "iam:GetRole",
+      "iam:UpdateRole",
       "iam:PassRole",
       "iam:AttachRolePolicy",
       "iam:DetachRolePolicy",
       "iam:ListAttachedRolePolicies",
       "iam:ListRolePolicies",
       "iam:ListInstanceProfilesForRole",
+      "iam:ListRoleTags",
       "iam:TagRole",
       "iam:UntagRole",
       "iam:UpdateAssumeRolePolicy",
@@ -57,6 +59,7 @@ data "aws_iam_policy_document" "github_actions_dev_platform_permissions" {
       "iam:DeleteOpenIDConnectProvider",
       "iam:GetOpenIDConnectProvider",
       "iam:TagOpenIDConnectProvider",
+      "iam:UntagOpenIDConnectProvider",
       "iam:ListOpenIDConnectProviders",
     ]
     resources = ["arn:aws:iam::*:oidc-provider/*"]
@@ -196,6 +199,8 @@ data "aws_iam_policy_document" "github_actions_dev_platform_permissions" {
     actions = [
       "ec2:AllocateAddress",
       "ec2:ReleaseAddress",
+      "ec2:AssociateAddress",
+      "ec2:DisassociateAddress",
       "ec2:DescribeAddresses",
       "ec2:DescribeAddressesAttribute",
     ]
@@ -225,6 +230,7 @@ data "aws_iam_policy_document" "github_actions_dev_platform_permissions" {
       "logs:DeleteLogGroup",
       "logs:DescribeLogGroups",
       "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy",
       "logs:TagLogGroup",
       "logs:ListTagsLogGroup",
       "logs:TagResource",
@@ -293,6 +299,9 @@ data "aws_iam_policy_document" "github_actions_dev_platform_permissions" {
       "kms:UntagResource",
       "kms:EnableKeyRotation",
       "kms:PutKeyPolicy",
+      "kms:CreateGrant",
+      "kms:ListGrants",
+      "kms:RevokeGrant",
     ]
     resources = ["*"]
   }

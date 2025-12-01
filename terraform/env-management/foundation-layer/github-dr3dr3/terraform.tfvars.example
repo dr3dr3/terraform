@@ -1,0 +1,36 @@
+# GitHub Repositories - Example Configuration
+#
+# Copy this file to terraform.tfvars and update the values as needed.
+# DO NOT commit terraform.tfvars to version control if it contains secrets.
+
+# GitHub Configuration
+github_owner = "dr3dr3"
+
+# Default Repository Settings
+default_visibility         = "public"
+default_has_issues         = true
+default_has_projects       = false
+default_has_wiki           = false
+default_has_downloads      = false
+default_has_discussions    = false
+default_allow_merge_commit = true
+default_allow_squash_merge = true
+default_allow_rebase_merge = true
+default_allow_auto_merge   = true
+default_delete_branch_on_merge = true
+default_allow_update_branch    = true
+default_vulnerability_alerts   = true
+default_archive_on_destroy     = true
+
+# Branch Protection Settings
+default_branch                  = "main"
+enforce_admins                  = false
+required_approving_review_count = 1
+dismiss_stale_reviews           = true
+require_code_owner_reviews      = false
+
+# Tags
+owner       = "platform-team"
+environment = "management"
+managed_by  = "terraform-cloud"
+layer       = "foundation"

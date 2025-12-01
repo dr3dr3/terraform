@@ -22,9 +22,9 @@ As of **tfe provider v0.65.0+** (released 2025), Terraform Cloud supports proper
 
 ```hcl
 tags = {
-  environment = "development"
-  layer       = "foundation"
-  owner       = "platform-team"
+  Environment = "Development"
+  Layer       = "Foundation"
+  Owner       = "Platform-Team"
 }
 ```
 
@@ -45,7 +45,7 @@ resource "tfe_workspace" "example" {
   project_id = tfe_project.platform.id
 
   tags = {
-    layer = "platform"  # Direct tag
+    Layer = "Platform"  # Direct tag
   }
 
   # effective_tags will include both direct tags AND tags from the project
@@ -59,8 +59,8 @@ The legacy `tag_names` attribute uses colon-separated strings. This is still sup
 ```hcl
 # DEPRECATED - use tags map instead
 tag_names = [
-  "environment:development",
-  "layer:foundation"
+  "Environment:Development",
+  "Layer:Foundation"
 ]
 ```
 
@@ -70,10 +70,10 @@ Every Terraform Cloud workspace MUST include these tags:
 
 ```hcl
 tags = {
-  environment = "<environment-name>"
-  managed-by  = "terraform-cloud"
-  layer       = "<layer-name>"
-  owner       = "<team-or-person>"
+  Environment = "<Environment-Name>"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "<Layer-Name>"
+  Owner       = "<Team-Or-Person>"
 }
 ```
 
@@ -81,10 +81,10 @@ tags = {
 
 | Tag Key | Values | Description |
 |---------|--------|-------------|
-| `environment` | management, development, staging, production, sandbox, local | Target AWS account/environment |
-| `managed-by` | terraform-cloud | Indicates workspace is managed via TFC |
-| `layer` | foundation, platform, applications, experiments | Infrastructure layer (see ADR-003) |
-| `owner` | team-name, person-email | Team or individual responsible |
+| `Environment` | Management, Development, Staging, Production, Sandbox, Local | Target AWS account/environment |
+| `ManagedBy` | Terraform-Cloud | Indicates workspace is managed via TFC |
+| `Layer` | Foundation, Platform, Applications, Experiments | Infrastructure layer (see ADR-003) |
+| `Owner` | Team-Name, Person-Email | Team or individual responsible |
 
 ## Sandbox Workspace Tags
 
@@ -92,13 +92,13 @@ Sandbox workspaces require additional tags for tracking and cleanup alignment:
 
 ```hcl
 tags = {
-  environment  = "sandbox"
-  managed-by   = "terraform-cloud"
-  layer        = "experiments"
-  owner        = "user-email"
-  purpose      = "learning"
-  auto-cleanup = "true"
-  max-lifetime = "7days"
+  Environment = "Sandbox"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "Experiments"
+  Owner       = "User-Email"
+  Purpose     = "Learning"
+  AutoCleanup = "True"
+  MaxLifetime = "7days"
 }
 ```
 
@@ -106,9 +106,9 @@ tags = {
 
 | Tag Key | Values | Description |
 |---------|--------|-------------|
-| `purpose` | testing, learning, experiment, integration-test | Why the workspace exists |
-| `auto-cleanup` | true, false | Enable/disable automated workspace cleanup |
-| `max-lifetime` | 7days, 30days, etc. | Maximum age before workspace archival |
+| `Purpose` | Testing, Learning, Experiment, Integration-Test | Why the workspace exists |
+| `AutoCleanup` | True, False | Enable/disable automated workspace cleanup |
+| `MaxLifetime` | 7days, 30days, etc. | Maximum age before workspace archival |
 
 ### Protection Tags
 
@@ -116,8 +116,8 @@ Prevent accidental deletion or archival:
 
 ```hcl
 tags = {
-  auto-cleanup = "false"
-  protected    = "true"
+  AutoCleanup = "False"
+  Protected   = "True"
 }
 ```
 
@@ -142,10 +142,10 @@ resource "tfe_project" "development" {
 
 | Tag Key | Description |
 |---------|-------------|
-| `team` | Owning team name |
-| `cost-center` | Cost allocation center |
-| `domain` | Business domain |
-| `environment` | Environment name (inherited by all workspaces) |
+| `Team` | Owning team name |
+| `CostCenter` | Cost allocation center |
+| `Domain` | Business domain |
+| `Environment` | Environment name (inherited by all workspaces) |
 
 ## Environment-Specific Patterns
 
@@ -153,10 +153,10 @@ resource "tfe_project" "development" {
 
 ```hcl
 tags = {
-  environment = "management"
-  managed-by  = "terraform-cloud"
-  layer       = "foundation"
-  owner       = "platform-team"
+  Environment = "Management"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "Foundation"
+  Owner       = "Platform-Team"
 }
 ```
 
@@ -164,10 +164,10 @@ tags = {
 
 ```hcl
 tags = {
-  environment = "development"
-  managed-by  = "terraform-cloud"
-  layer       = "platform"
-  owner       = "backend-team"
+  Environment = "Development"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "Platform"
+  Owner       = "Backend-Team"
 }
 ```
 
@@ -175,13 +175,13 @@ tags = {
 
 ```hcl
 tags = {
-  environment  = "sandbox"
-  managed-by   = "terraform-cloud"
-  layer        = "experiments"
-  owner        = "user-example-com"
-  purpose      = "learning"
-  auto-cleanup = "true"
-  max-lifetime = "7days"
+  Environment = "Sandbox"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "Experiments"
+  Owner       = "User-Example-Com"
+  Purpose     = "Learning"
+  AutoCleanup = "True"
+  MaxLifetime = "7days"
 }
 ```
 
@@ -189,11 +189,11 @@ tags = {
 
 ```hcl
 tags = {
-  environment = "local"
-  managed-by  = "terraform-cloud"
-  layer       = "sandbox-layer"
-  owner       = "developer-name"
-  purpose     = "local-testing"
+  Environment = "Local"
+  ManagedBy   = "Terraform-Cloud"
+  Layer       = "Sandbox-Layer"
+  Owner       = "Developer-Name"
+  Purpose     = "Local-Testing"
 }
 ```
 
@@ -203,13 +203,13 @@ With proper key-value tags, Terraform Cloud tags now directly align with AWS res
 
 | AWS Tag Key | AWS Tag Value | TFC Tag Key | TFC Tag Value |
 |-------------|---------------|-------------|---------------|
-| Environment | Development | environment | development |
-| ManagedBy | Terraform | managed-by | terraform-cloud |
-| Layer | foundation | layer | foundation |
-| Owner | team-name | owner | team-name |
-| Purpose | learning | purpose | learning |
-| AutoCleanup | true | auto-cleanup | true |
-| MaxLifetime | 7days | max-lifetime | 7days |
+| Environment | Development | Environment | Development |
+| ManagedBy | Terraform | ManagedBy | Terraform-Cloud |
+| Layer | Foundation | Layer | Foundation |
+| Owner | Team-Name | Owner | Team-Name |
+| Purpose | Learning | Purpose | Learning |
+| AutoCleanup | True | AutoCleanup | True |
+| MaxLifetime | 7days | MaxLifetime | 7days |
 
 ## Workspace Naming Convention
 
@@ -233,9 +233,9 @@ Tag variable sets to control which workspaces they apply to:
 ```hcl
 # Scope by tag key-value pairs
 tags = {
-  scope-environment = "development"
-  scope-layer       = "foundation"
-  scope-team        = "platform"
+  ScopeEnvironment = "Development"
+  ScopeLayer       = "Foundation"
+  ScopeTeam        = "Platform"
 }
 ```
 
@@ -245,8 +245,8 @@ Use tags to organize run trigger relationships:
 
 ```hcl
 tags = {
-  depends-on = "foundation"   # Upstream dependencies
-  triggers   = "applications" # Downstream consumers
+  DependsOn = "Foundation"   # Upstream dependencies
+  Triggers  = "Applications" # Downstream consumers
 }
 ```
 
@@ -258,13 +258,13 @@ Tags can be used with Sentinel policies:
 
 ```text
 # Require sandbox workspaces to have cleanup tags
-environment = "sandbox" → must have auto-cleanup tag
+Environment = "Sandbox" → must have AutoCleanup tag
 
 # Restrict production deployments
-environment = "production" → require-approval = "true"
+Environment = "Production" → RequireApproval = "True"
 
 # Enforce ownership
-All workspaces → must have owner tag
+All workspaces → must have Owner tag
 ```
 
 ### Tag-Based Policy Sets
@@ -273,9 +273,9 @@ Attach policy sets based on tags:
 
 | Policy Set | Applied To Tags |
 |------------|-----------------|
-| sandbox-policies | `environment = "sandbox"` |
-| production-policies | `environment = "production"` |
-| foundation-policies | `layer = "foundation"` |
+| sandbox-policies | `Environment = "Sandbox"` |
+| production-policies | `Environment = "Production"` |
+| foundation-policies | `Layer = "Foundation"` |
 
 ## Implementation in Terraform
 
@@ -288,10 +288,10 @@ resource "tfe_workspace" "example" {
   project_id   = tfe_project.development.id
 
   tags = {
-    environment = "development"
-    managed-by  = "terraform-cloud"
-    layer       = "foundation"
-    owner       = "platform-team"
+    Environment = "Development"
+    ManagedBy   = "Terraform-Cloud"
+    Layer       = "Foundation"
+    Owner       = "Platform-Team"
   }
 
   # Read-only: shows direct tags + inherited from project
@@ -308,13 +308,13 @@ resource "tfe_workspace" "sandbox_experiment" {
   project_id   = tfe_project.sandbox.id
 
   tags = {
-    environment  = "sandbox"
-    managed-by   = "terraform-cloud"
-    layer        = "experiments"
-    owner        = var.owner
-    purpose      = "learning"
-    auto-cleanup = "true"
-    max-lifetime = "7days"
+    Environment = "Sandbox"
+    ManagedBy   = "Terraform-Cloud"
+    Layer       = "Experiments"
+    Owner       = var.owner
+    Purpose     = "Learning"
+    AutoCleanup = "True"
+    MaxLifetime = "7days"
   }
 }
 ```
@@ -324,16 +324,16 @@ resource "tfe_workspace" "sandbox_experiment" {
 ```hcl
 locals {
   common_tags = {
-    environment = var.environment
-    managed-by  = "terraform-cloud"
-    layer       = var.layer
-    owner       = var.owner
+    Environment = var.environment
+    ManagedBy   = "Terraform-Cloud"
+    Layer       = var.layer
+    Owner       = var.owner
   }
 
   sandbox_tags = {
-    purpose      = var.purpose
-    auto-cleanup = "true"
-    max-lifetime = var.max_lifetime
+    Purpose     = var.purpose
+    AutoCleanup = "True"
+    MaxLifetime = var.max_lifetime
   }
 }
 
@@ -342,7 +342,7 @@ resource "tfe_workspace" "example" {
   organization = var.organization
   project_id   = var.project_id
 
-  tags = var.environment == "sandbox" ? merge(local.common_tags, local.sandbox_tags) : local.common_tags
+  tags = var.environment == "Sandbox" ? merge(local.common_tags, local.sandbox_tags) : local.common_tags
 }
 ```
 
@@ -356,8 +356,8 @@ resource "tfe_workspace" "example" {
   organization = var.organization
 
   tags = {
-    environment = "development"
-    managed-by  = "terraform-cloud"
+    Environment = "Development"
+    ManagedBy   = "Terraform-Cloud"
   }
 
   # Don't remove tags added outside of Terraform
@@ -399,8 +399,8 @@ data "tfe_workspace_ids" "sandbox" {
   organization = var.organization
 
   tag_filters {
-    key   = "environment"
-    value = "sandbox"
+    key   = "Environment"
+    value = "Sandbox"
   }
 }
 ```
@@ -415,8 +415,8 @@ data "tfe_workspace_ids" "sandbox" {
   organization = var.organization
 
   tag_filters {
-    key   = "environment"
-    value = "sandbox"
+    key   = "Environment"
+    value = "Sandbox"
   }
 }
 
@@ -425,8 +425,8 @@ data "tfe_workspace_ids" "foundation" {
   organization = var.organization
 
   tag_filters {
-    key   = "layer"
-    value = "foundation"
+    key   = "Layer"
+    value = "Foundation"
   }
 }
 
@@ -435,20 +435,20 @@ data "tfe_workspace_ids" "cleanup_candidates" {
   organization = var.organization
 
   tag_filters {
-    key   = "environment"
-    value = "sandbox"
+    key   = "Environment"
+    value = "Sandbox"
   }
 
   tag_filters {
-    key   = "auto-cleanup"
-    value = "true"
+    key   = "AutoCleanup"
+    value = "True"
   }
 }
 
 # Legacy format still works but not recommended
 data "tfe_workspace_ids" "legacy_example" {
   organization = var.organization
-  tag_names    = ["environment:sandbox"]  # Deprecated
+  tag_names    = ["Environment:Sandbox"]  # Deprecated
 }
 ```
 
@@ -456,10 +456,10 @@ data "tfe_workspace_ids" "legacy_example" {
 
 ```bash
 # List workspaces with specific tag (key-value)
-terraform cloud workspace list --filter="tags.environment=sandbox"
+terraform cloud workspace list --filter="tags.Environment=Sandbox"
 
 # Filter by multiple tags (AND logic)
-terraform cloud workspace list --filter="tags.environment=sandbox" --filter="tags.layer=experiments"
+terraform cloud workspace list --filter="tags.Environment=Sandbox" --filter="tags.Layer=Experiments"
 ```
 
 ### API: Tag Bindings
@@ -478,13 +478,13 @@ curl -H "Authorization: Bearer $TFC_TOKEN" \
 
 When generating Terraform Cloud workspace configurations:
 
-1. **Use `tags` attribute (map)**: Prefer `tags = { key = "value" }` over legacy `tag_names`
-2. **Always include required tags**: `environment`, `managed-by`, `layer`, `owner`
-3. **For Sandbox**: Add `purpose`, `auto-cleanup`, `max-lifetime`
+1. **Use `tags` attribute (map)**: Prefer `tags = { Key = "Value" }` over legacy `tag_names`
+2. **Always include required tags**: `Environment`, `ManagedBy`, `Layer`, `Owner`
+3. **For Sandbox**: Add `Purpose`, `AutoCleanup`, `MaxLifetime`
 4. **Use local variables** with `merge()` to combine common and workspace-specific tags
 5. **Set project-level tags** for inheritance where applicable
 6. **Use `ignore_additional_tags`** if tags are also managed outside Terraform
-7. **Align with AWS tags**: Key names and values should match AWS resource tags
+7. **Align with AWS tags**: Key names and values should match AWS resource tags (use Capital letters)
 8. **Follow naming convention**: `<environment>-<layer>-<component>`
 9. **Use `tag_filters`** in data sources for workspace lookups
 10. **Avoid reserved prefixes**: Do not use `hc:` or `hcp:` as key prefixes
@@ -497,15 +497,15 @@ If migrating from `tag_names` to `tags`:
 # Before (legacy)
 resource "tfe_workspace" "example" {
   name      = "my-workspace"
-  tag_names = ["environment:development", "layer:foundation"]
+  tag_names = ["Environment:Development", "Layer:Foundation"]
 }
 
 # After (recommended)
 resource "tfe_workspace" "example" {
   name = "my-workspace"
   tags = {
-    environment = "development"
-    layer       = "foundation"
+    Environment = "Development"
+    Layer       = "Foundation"
   }
 }
 ```
@@ -523,7 +523,7 @@ resource "tfe_workspace" "example" {
 | Sandbox | 4 base tags | purpose, auto-cleanup, max-lifetime |
 | Local | 4 base tags | purpose |
 
-**Base Tags**: `environment`, `managed-by`, `layer`, `owner`
+**Base Tags**: `Environment`, `ManagedBy`, `Layer`, `Owner`
 
 ### Provider Version Requirements
 

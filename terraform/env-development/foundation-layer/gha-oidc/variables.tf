@@ -23,7 +23,7 @@ variable "github_repo" {
 variable "session_duration" {
   description = "Maximum session duration in seconds (1-12 hours)"
   type        = number
-  default     = 3600 # 1 hour
+  default     = 7200 # 2 hours (matches iam-roles-for-terraform)
 
   validation {
     condition     = var.session_duration >= 3600 && var.session_duration <= 43200
