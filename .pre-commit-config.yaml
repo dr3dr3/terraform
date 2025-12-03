@@ -1,0 +1,43 @@
+repos:
+  # Terraform formatting and validation
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.1
+    hooks:
+      - id: terraform_fmt
+        files: ^terraform/
+        args:
+          - --args=-recursive
+
+      - id: terraform_validate
+        files: ^terraform/
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+
+      - id: terraform_tflint
+        files: ^terraform/
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+
+      - id: terraform_checkov
+        files: ^terraform/
+        args:
+          - --args=--quiet
+          - --args=--compact
+
+      - id: terraform_docs
+        files: ^terraform/
+        args:
+          - --args=--output-file=README.md
+          - --args=--output-mode=inject
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        files: ^terraform/
+      - id: end-of-file-fixer
+        files: ^terraform/
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict

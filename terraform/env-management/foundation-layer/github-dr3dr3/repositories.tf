@@ -9,11 +9,11 @@
 resource "github_repository" "repos" {
   for_each = local.repositories
 
-  name        = each.key
-  description = each.value.description
-  visibility  = lookup(each.value, "visibility", var.default_visibility)
+  name         = each.key
+  description  = each.value.description
+  visibility   = lookup(each.value, "visibility", var.default_visibility)
   homepage_url = lookup(each.value, "homepage", null)
-  topics      = lookup(each.value, "topics", [])
+  topics       = lookup(each.value, "topics", [])
 
   # Features
   has_issues      = lookup(each.value, "has_issues", var.default_has_issues)

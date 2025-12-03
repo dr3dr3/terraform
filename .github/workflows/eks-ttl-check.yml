@@ -240,3 +240,22 @@ jobs:
           echo "**Expired clusters:** ${{ needs.check-development.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "To actually destroy these clusters, run this workflow with \`dry_run: false\`" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Sync 1Password After TTL Destroy (Per ADR-017)
+  # ===========================================================================
+  # When a cluster is destroyed due to TTL expiration, we need to clean up
+  # the corresponding 1Password secure note. The reusable workflow will:
+  # - Check TFC outputs for cluster existence
+  # - Since cluster is gone, Terraform will destroy the 1Password item (count=0)
+  # ===========================================================================
+  sync-1password-after-ttl-destroy:
+    name: "Sync 1Password (Post-TTL Cleanup)"
+    needs: destroy-development
+    if: needs.destroy-development.result == 'success'
+    uses: ./.github/workflows/reusable-1password-eks-sync.yml
+    with:
+      environment: development
+    secrets:
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}

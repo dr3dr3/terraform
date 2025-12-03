@@ -11,7 +11,7 @@ terraform {
 
 # Provider configuration for LocalStack
 provider "aws" {
-  region                      = "us-east-1"  # Match LocalStack default region
+  region                      = "us-east-1" # Match LocalStack default region
   access_key                  = "test"
   secret_key                  = "test"
   skip_credentials_validation = true
@@ -21,10 +21,10 @@ provider "aws" {
 
   # LocalStack endpoints
   endpoints {
-    ec2            = "http://localhost:4566"
-    eks            = "http://localhost:4566"
-    iam            = "http://localhost:4566"
-    sts            = "http://localhost:4566"
+    ec2 = "http://localhost:4566"
+    eks = "http://localhost:4566"
+    iam = "http://localhost:4566"
+    sts = "http://localhost:4566"
   }
 }
 
@@ -34,7 +34,7 @@ provider "aws" {
 
 locals {
   name = "learning-eks"
-  
+
   tags = {
     Environment = "learning"
     ManagedBy   = "terraform"
@@ -62,7 +62,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
-  availability_zone = "us-east-1a"  # LocalStack typically uses us-east-1a
+  availability_zone = "us-east-1a" # LocalStack typically uses us-east-1a
 
   tags = merge(
     local.tags,

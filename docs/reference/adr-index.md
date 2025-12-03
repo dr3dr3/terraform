@@ -2,7 +2,7 @@
 
 > Quick reference for all Architecture Decision Records. Read the full ADR for complete context.
 
-**Last Updated**: November 24, 2025
+**Last Updated**: December 1, 2025
 
 ---
 
@@ -23,6 +23,8 @@
 | [ADR-011](./architecture-decision-register/ADR-011-sandbox-environment.md) | Sandbox Environment for Testing and Experimentation | Dedicated AWS account with standard layers + experiments layer | Approved | 2025-11-17 |
 | [ADR-012](./architecture-decision-register/ADR-012-sandbox-automated-cleanup.md) | Automated Resource Cleanup for Sandbox Environment | Hybrid: Terraform Destroy + AWS Nuke v3 | Proposed | 2024-11-24 |
 | [ADR-015](./architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md) | User Personas for AWS SSO and EKS RBAC | 5-tier persona model with least privilege | Approved | 2025-11-29 |
+| [ADR-016](./architecture-decision-register/ADR-016-eks-credentials-cross-repo-access.md) | EKS Cluster Credentials and Cross-Repository Access | Store cluster details in 1Password + AWS SSO for auth | Approved | 2025-12-01 |
+| [ADR-017](./architecture-decision-register/ADR-017-eks-1password-lifecycle-coordination.md) | EKS and 1Password Lifecycle Coordination | Terraform-managed conditional resources with reusable GHA workflow | Approved | 2025-12-03 |
 
 ## Superseded Decisions
 
@@ -99,6 +101,8 @@ When working with this codebase, follow decisions in Active ADRs:
 - **Application resources**: Engineers define in k8s-manifests using K8s native resources and CRDs (Istio, etc.)
 - **Service mesh**: Istio deployed via Helm, VirtualServices defined as CRDs in app manifests
 - **Policy enforcement**: Kyverno deployed via Helm, policies defined as CRDs
+- **EKS Access Pattern** (ADR-016): Cluster connection details stored in 1Password, AWS SSO for authentication, dynamic kubeconfig generation via `aws eks update-kubeconfig`
+- **Cross-repo access**: Separate admin devcontainer repo for kubectl/cluster management, terraform repo for provisioning
 
 **Multi-Cloud & Environments:**
 

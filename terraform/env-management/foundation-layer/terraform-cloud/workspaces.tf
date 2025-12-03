@@ -25,8 +25,9 @@ resource "tfe_workspace" "management_foundation_tfc_oidc_role" {
     Environment = "Management"
     Layer       = "Foundation"
     AwsAccount  = "Management"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -52,8 +53,9 @@ resource "tfe_workspace" "management_foundation_iam_people" {
     Environment = "Management"
     Layer       = "Foundation"
     AwsAccount  = "Management"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -72,6 +74,26 @@ resource "tfe_variable" "management_foundation_iam_people_role_arn" {
   value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
   category     = "env"
   description  = "AWS IAM role ARN for OIDC authentication"
+}
+
+# Terraform variables for IAM Roles for People workspace
+# These assign permission sets to groups across all AWS accounts
+resource "tfe_variable" "management_foundation_iam_people_additional_accounts" {
+  workspace_id = tfe_workspace.management_foundation_iam_people.id
+  key          = "additional_account_ids"
+  value        = jsonencode(local.all_account_ids)
+  category     = "terraform"
+  hcl          = true
+  description  = "All AWS account IDs for permission set assignments (Admin, Platform Engineers, Auditors)"
+}
+
+resource "tfe_variable" "management_foundation_iam_people_non_prod_accounts" {
+  workspace_id = tfe_workspace.management_foundation_iam_people.id
+  key          = "non_production_account_ids"
+  value        = jsonencode(local.non_production_account_ids)
+  category     = "terraform"
+  hcl          = true
+  description  = "Non-production AWS account IDs (Namespace Admins, Developers only)"
 }
 
 # REMOVED: management_foundation_iam_terraform
@@ -98,8 +120,9 @@ resource "tfe_workspace" "management_foundation_gha_oidc" {
     Environment = "Management"
     Layer       = "Foundation"
     AwsAccount  = "Management"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -140,13 +163,53 @@ resource "tfe_workspace" "management_foundation_github_dr3dr3" {
     Environment = "Management"
     Layer       = "Foundation"
     AwsAccount  = "Management"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
 # Note: GITHUB_TOKEN environment variable should be set manually in TFC
 # This token requires repo, admin:repo_hook, and workflow scopes
+
+# Management - Foundation Layer - EKS Cluster Admin
+# ADR-016: Syncs EKS cluster connection details to 1Password
+# ADR-014: CLI-driven, Manual apply
+resource "tfe_workspace" "management_foundation_eks_cluster_admin" {
+  name         = "management-foundation-eks-cluster-admin"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_management.id
+  description  = "Syncs EKS cluster connection details to 1Password for devcontainer access (ADR-016)"
+
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-management/foundation-layer/eks-cluster-admin"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Foundation requires manual approval
+
+  tags = {
+    Environment = "Management"
+    Layer       = "Foundation"
+    AwsAccount  = "Management"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
+    Integration = "1Password"
+  }
+}
+
+# Workspace settings for EKS Cluster Admin
+# Moved from deprecated remote_state_consumer_ids attribute on tfe_workspace
+resource "tfe_workspace_settings" "management_foundation_eks_cluster_admin" {
+  workspace_id = tfe_workspace.management_foundation_eks_cluster_admin.id
+
+  # Allow reading outputs from other workspaces (empty = global remote state sharing disabled)
+  remote_state_consumer_ids = []
+}
+
+# Note: OP_SERVICE_ACCOUNT_TOKEN environment variable must be set manually in TFC
+# This token is required for the 1Password Terraform provider to authenticate
 
 ################################################################################
 # Development Environment Workspaces
@@ -182,8 +245,9 @@ resource "tfe_workspace" "dev_platform_eks" {
     Environment = "Development"
     Layer       = "Platform"
     AwsAccount  = "Development"
-    ManagedBy   = "Terraform"
-    Cicd        = "Github-Actions" # ADR-014: API/GHA-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Github-Actions" # ADR-014: API/GHA-driven trigger
     Workload    = "Eks"
   }
 }
@@ -212,8 +276,9 @@ resource "tfe_workspace" "dev_foundation_gha_oidc" {
     Environment = "Development"
     Layer       = "Foundation"
     AwsAccount  = "Development"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
     Bootstrap   = "True"
   }
 }
@@ -256,8 +321,9 @@ resource "tfe_workspace" "dev_foundation_iam_roles_terraform" {
     Environment = "Development"
     Layer       = "Foundation"
     AwsAccount  = "Development"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
     Bootstrap   = "True"
   }
 }
@@ -309,8 +375,9 @@ resource "tfe_workspace" "staging_foundation_iam_roles" {
     Environment = "Staging"
     Layer       = "Foundation"
     AwsAccount  = "Staging"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -344,8 +411,9 @@ resource "tfe_workspace" "sandbox_foundation_iam_roles" {
     Environment = "Sandbox"
     Layer       = "Foundation"
     AwsAccount  = "Sandbox"
-    ManagedBy   = "Terraform"
-    Cicd        = "Cli" # ADR-014: CLI-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
   }
 }
 
@@ -375,9 +443,12 @@ resource "tfe_workspace" "sandbox_platform_eks" {
     Environment = "Sandbox"
     Layer       = "Platform"
     AwsAccount  = "Sandbox"
-    ManagedBy   = "Terraform"
-    Cicd        = "Vcs" # ADR-014: VCS-driven trigger
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Vcs" # ADR-014: VCS-driven trigger
     Workload    = "Eks"
+    Purpose     = "Learning"
+    AutoCleanup = "False" # Protected - infrastructure workspace
   }
 }
 

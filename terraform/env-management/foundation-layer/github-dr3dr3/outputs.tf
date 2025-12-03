@@ -6,19 +6,19 @@ output "repositories" {
   description = "Map of all managed repositories with their details"
   value = {
     for name, repo in github_repository.repos : name => {
-      id               = repo.id
-      name             = repo.name
-      full_name        = repo.full_name
-      html_url         = repo.html_url
-      ssh_clone_url    = repo.ssh_clone_url
-      git_clone_url    = repo.git_clone_url
-      visibility       = repo.visibility
-      default_branch   = repo.default_branch
-      topics           = repo.topics
-      has_issues       = repo.has_issues
-      has_projects     = repo.has_projects
-      has_wiki         = repo.has_wiki
-      has_discussions  = repo.has_discussions
+      id              = repo.id
+      name            = repo.name
+      full_name       = repo.full_name
+      html_url        = repo.html_url
+      ssh_clone_url   = repo.ssh_clone_url
+      git_clone_url   = repo.git_clone_url
+      visibility      = repo.visibility
+      default_branch  = repo.default_branch
+      topics          = repo.topics
+      has_issues      = repo.has_issues
+      has_projects    = repo.has_projects
+      has_wiki        = repo.has_wiki
+      has_discussions = repo.has_discussions
     }
   }
 }

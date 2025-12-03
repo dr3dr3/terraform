@@ -31,6 +31,21 @@ end
 3. **Terraform Cloud Authentication**
    - Run `terraform login` and provide your TF Cloud User Token (under your Account Settings)
 
+4. **Install Pre-Commit Hook** (for Terraform validation)
+
+   ```bash
+   cp scripts/pre-commit-terraform.sh .git/hooks/pre-commit
+   ```
+
+   This hook runs automatically before each commit and checks:
+
+   - `terraform fmt` - Formatting validation
+   - `terraform validate` - Configuration validation
+   - `tflint` - Linting (if installed)
+   - `checkov` - Security scanning (if installed)
+
+   Only runs on changes to the `terraform/` folder.
+
 ## Git Repositories
 
 - [Terraform Repository](https://github.com/dr3dr3/terraform) - Main repository with both Terraform code and documentation

@@ -1,5 +1,13 @@
 # GitHub Copilot Instructions
 
+## Available Copilot Agents
+
+Custom agents are available in `.github/copilot-agents/`:
+
+| Agent | Purpose | How to Use |
+|-------|---------|------------|
+| [commit-and-pr](copilot-agents/commit-and-pr.md) | Commit changes and create a PR | Say: "Commit my changes and create a PR" |
+
 ## Markdown Formatting Rules
 
 When creating or editing Markdown files, follow these linting rules to ensure consistency and avoid common errors:

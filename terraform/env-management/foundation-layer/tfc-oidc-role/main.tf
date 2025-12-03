@@ -18,7 +18,7 @@ resource "aws_iam_openid_connect_provider" "terraform_cloud" {
 
 # Create role for Terraform Cloud to assume
 resource "aws_iam_role" "terraform_cloud_oidc" {
-  name               = "terraform-cloud-oidc-role"
+  name = "terraform-cloud-oidc-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -46,7 +46,7 @@ resource "aws_iam_role" "terraform_cloud_oidc" {
       Purpose = "Terraform Cloud OIDC authentication"
     },
     {
-      Owner      = var.owner
+      Owner = var.owner
     }
   )
 }
@@ -54,8 +54,8 @@ resource "aws_iam_role" "terraform_cloud_oidc" {
 # Attach permissions to the role
 # For management account IAM Identity Center operations
 resource "aws_iam_role_policy" "terraform_cloud_oidc" {
-  name   = "terraform-cloud-oidc-policy"
-  role   = aws_iam_role.terraform_cloud_oidc.id
+  name = "terraform-cloud-oidc-policy"
+  role = aws_iam_role.terraform_cloud_oidc.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -71,6 +71,22 @@ resource "aws_iam_role_policy" "terraform_cloud_oidc" {
       },
       {
         Sid    = "IAMForSSOAccountAssignment"
+        Effect = "Allow"
+        Action = [
+          # Required for SSO account assignments - AWS needs to verify/create SSO roles
+          "iam:GetRole",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:GetRolePolicy"
+        ]
+        Resource = [
+          # AWS SSO creates these reserved roles when provisioning access
+          "arn:aws:iam::*:role/aws-reserved/sso.amazonaws.com/*",
+          "arn:aws:iam::*:role/AWSReservedSSO_*"
+        ]
+      },
+      {
+        Sid    = "IAMSAMLProviders"
         Effect = "Allow"
         Action = [
           "iam:GetSAMLProvider",
