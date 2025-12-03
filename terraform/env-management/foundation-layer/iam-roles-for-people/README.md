@@ -214,6 +214,14 @@ For learning purposes, create test users in IAM Identity Center and add them to 
 | dev-user | `developer@example.com` | Developers |
 | audit-user | `auditor@example.com` | Auditors |
 
+## Managed Users
+
+The following users are fully managed by this Terraform configuration:
+
+| Username | Display Name | Email | Groups |
+|----------|--------------|-------|--------|
+| andre.dreyer | André Dreyer | `andre.dreyer@datafaced.com` | All groups |
+
 ### Adding Users via AWS CLI
 
 ```bash
@@ -234,6 +242,10 @@ aws identitystore create-group-membership \
 terraform output sso_instance_arn
 terraform output identity_store_id
 
+# User IDs
+terraform output andre_dreyer_user_id
+terraform output andre_dreyer_username
+
 # Group IDs (for adding users)
 terraform output admin_group_id
 terraform output platform_engineers_group_id
@@ -250,6 +262,9 @@ terraform output auditors_permission_set_arn
 
 # Summary of all personas
 terraform output user_personas_summary
+
+# Summary of managed users
+terraform output managed_users_summary
 ```
 
 ## Security Considerations

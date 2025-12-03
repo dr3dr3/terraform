@@ -1,14 +1,28 @@
 # Variables: Tags
-owner       = "platform-team"
-environment = "management"
-managed-by  = "terraform"
-layer       = "foundation"
+owner       = "Platform-Team"
+environment = "Management"
+managed_by  = "Terraform"
+layer       = "Foundation"
 
-# Optional: Add additional AWS account IDs to assign permission sets
-# This allows the groups to access other accounts in your organization
+###############################################################################
+# ACCOUNT CONFIGURATION
+# Based on ADR-015 User Personas - Environment Access Strategy
+###############################################################################
+
+# All AWS account IDs in the organization
+# Administrators, Platform Engineers, and Auditors get access to ALL these accounts
 additional_account_ids = [
-  "126350206316",  # Development account
-  "163436765579",  # Staging account
-  "820485071161",  # Production account
-  "898468025925",  # Sandbox account
+  "126350206316", # Development account
+  "163436765579", # Staging account
+  "820485071161", # Production account
+  "898468025925", # Sandbox account
+]
+
+# Non-production accounts only
+# Namespace Admins and Developers ONLY get access to these accounts
+# This implements least privilege - developers cannot access production
+non_production_account_ids = [
+  "126350206316", # Development account
+  "163436765579", # Staging account
+  "898468025925", # Sandbox account
 ]

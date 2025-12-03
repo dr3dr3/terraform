@@ -181,5 +181,18 @@ locals {
       protected_branches = ["main"]
       environments       = ["homelab"]
     }
+
+    "eks-cluster-admin" = {
+      description = "EKS cluster administration devcontainer - kubectl, AWS CLI, and Kubernetes tools (ADR-016)"
+      topics      = ["eks", "kubernetes", "devcontainer", "aws", "kubectl", "k9s"]
+      homepage    = ""
+      visibility  = "public"
+
+      has_issues = true
+      has_wiki   = true
+
+      protected_branches = ["main"]
+      environments       = []
+    }
   }
 }

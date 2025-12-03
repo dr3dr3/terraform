@@ -13,6 +13,20 @@ output "identity_store_id" {
 }
 
 ###############################################################################
+# USER OUTPUTS
+###############################################################################
+
+output "andre_dreyer_user_id" {
+  description = "User ID of André Dreyer in the Identity Store"
+  value       = aws_identitystore_user.andre_dreyer.user_id
+}
+
+output "andre_dreyer_username" {
+  description = "Username of André Dreyer"
+  value       = aws_identitystore_user.andre_dreyer.user_name
+}
+
+###############################################################################
 # GROUP ID OUTPUTS
 # These IDs are needed to add users to groups
 ###############################################################################
@@ -48,8 +62,8 @@ output "auditors_group_id" {
 ###############################################################################
 
 output "admin_permission_set_arn" {
-  description = "ARN of the Administrator Access permission set"
-  value       = aws_ssoadmin_permission_set.admin.arn
+  description = "ARN of the Administrator Access permission set (existing, not managed by this Terraform)"
+  value       = data.aws_ssoadmin_permission_set.admin.arn
 }
 
 output "platform_engineers_permission_set_arn" {
@@ -78,8 +92,8 @@ output "auditors_permission_set_arn" {
 ###############################################################################
 
 output "admin_permission_set_name" {
-  description = "Name of the Administrator Access permission set"
-  value       = aws_ssoadmin_permission_set.admin.name
+  description = "Name of the Administrator Access permission set (existing, not managed by this Terraform)"
+  value       = data.aws_ssoadmin_permission_set.admin.name
 }
 
 output "platform_engineers_permission_set_name" {
@@ -111,10 +125,10 @@ output "user_personas_summary" {
   value = {
     administrator = {
       group_id           = aws_identitystore_group.admin.group_id
-      permission_set_arn = aws_ssoadmin_permission_set.admin.arn
+      permission_set_arn = data.aws_ssoadmin_permission_set.admin.arn
       k8s_role           = "cluster-admin"
-      session_duration   = "4 hours"
-      description        = "Full AWS + K8s access for platform owners"
+      session_duration   = "existing"
+      description        = "Full AWS + K8s access for platform owners (existing permission set)"
     }
     platform_engineer = {
       group_id           = aws_identitystore_group.platform_engineers.group_id
@@ -143,6 +157,19 @@ output "user_personas_summary" {
       k8s_role           = "view"
       session_duration   = "12 hours"
       description        = "Read-only for compliance auditing"
+    }
+  }
+}
+
+output "managed_users_summary" {
+  description = "Summary of all users managed by this Terraform configuration"
+  value = {
+    andre_dreyer = {
+      user_id      = aws_identitystore_user.andre_dreyer.user_id
+      username     = aws_identitystore_user.andre_dreyer.user_name
+      display_name = aws_identitystore_user.andre_dreyer.display_name
+      email        = "andre.dreyer@datafaced.com"
+      groups       = ["Administrators", "Platform-Engineers", "Namespace-Admins", "Developers", "Auditors"]
     }
   }
 }

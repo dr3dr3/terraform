@@ -1,0 +1,42 @@
+# =============================================================================
+# Example Terraform Variables
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in the values.
+#
+# IMPORTANT: This workspace uses CLI Mode (1Password CLI)
+# -----------------------------------------------------
+# 1. Set TFC workspace execution mode to "Local"
+# 2. Set OP_SERVICE_ACCOUNT_TOKEN environment variable
+# 3. Run terraform locally (not in TFC remote runners)
+#
+# See README.md for detailed setup instructions.
+# =============================================================================
+
+# Terraform Cloud Configuration
+tfc_organization = "Datafaced"
+
+# 1Password Configuration
+onepassword_vault_name = "terraform"
+
+# AWS Configuration
+aws_region = "ap-southeast-2"
+
+# AWS Account IDs
+# Replace with actual account IDs or use 1Password references
+# aws_account_id_development = "op://Infrastructure/AWS-Development/account_id"
+aws_account_id_development = "126350206316"
+aws_account_id_staging     = ""
+aws_account_id_production  = ""
+aws_account_id_sandbox     = ""
+
+# EKS Workspace Names (must match Terraform Cloud workspace names)
+eks_development_workspace = "development-platform-eks"
+eks_staging_workspace     = "staging-platform-eks"
+eks_production_workspace  = "production-platform-eks"
+eks_sandbox_workspace     = "sandbox-platform-eks"
+
+# Sync Toggles - Enable/disable syncing for each environment
+sync_development_eks = true
+sync_staging_eks     = false
+sync_production_eks  = false
+sync_sandbox_eks     = false

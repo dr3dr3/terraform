@@ -1,0 +1,30 @@
+# =============================================================================
+# Backend Override for Local Execution
+# =============================================================================
+# Copy this file to backend_override.tf for local execution with 1Password CLI.
+#
+# This overrides the cloud backend to use local execution mode, which means:
+# - Terraform runs locally on your machine (where `op` CLI is available)
+# - State is still stored in Terraform Cloud
+#
+# Usage:
+#   cp backend_override.tf.example backend_override.tf
+#   export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
+#   terraform init -reconfigure
+#   terraform plan
+# =============================================================================
+
+terraform {
+  cloud {
+    organization = "Datafaced"
+
+    workspaces {
+      name = "management-foundation-eks-cluster-admin"
+    }
+  }
+}
+
+# Note: You also need to set the workspace execution mode to "Local" in TFC UI:
+# 1. Go to: https://app.terraform.io/app/Datafaced/workspaces/management-foundation-eks-cluster-admin/settings/general
+# 2. Under "Execution Mode", select "Local"
+# 3. Save settings
