@@ -125,12 +125,27 @@ Template for PR body:
 {Any context or specific areas to focus review on}
 ```
 
-### Step 5: Confirm Success
+### Step 5: Clean Up Local Workspace
+
+Return to the main branch and update it:
+
+```bash
+# Switch back to main branch
+git checkout main
+
+# Pull latest changes from remote
+git pull origin main
+```
+
+This ensures your workspace is ready for the next task.
+
+### Step 6: Confirm Success
 
 After creating the PR, provide:
 
 - Link to the PR
 - Summary of what was committed
+- Confirmation that local workspace is back on `main` and up-to-date
 - Reminder that the branch will be auto-deleted after merge (per repository settings)
 
 ## Repository Context

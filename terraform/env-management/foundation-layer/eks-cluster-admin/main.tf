@@ -21,21 +21,12 @@ terraform {
 # =============================================================================
 # Provider Configuration
 # =============================================================================
-# IMPORTANT: The 1Password Terraform provider has two modes:
-#
-# 1. CLI Mode (service_account_token): Requires the `op` CLI binary installed.
-#    This does NOT work in Terraform Cloud standard runners.
-#    Use this for local development or self-hosted agents.
-#
-# 2. Connect Mode (url + token): Uses the 1Password Connect REST API directly.
-#    This works in Terraform Cloud but requires deploying a Connect server.
-#
-# This workspace uses CLI Mode - run locally with `op` CLI installed.
+# The 1Password Terraform provider authenticates via Service Account Token.
+# The token is passed via the `onepassword_service_account_token` variable.
 # =============================================================================
 
 provider "onepassword" {
-  # CLI Mode - requires `op` CLI installed and OP_SERVICE_ACCOUNT_TOKEN set
-  # Run this workspace locally, not in Terraform Cloud standard runners
+  service_account_token = var.onepassword_service_account_token
 }
 
 # =============================================================================

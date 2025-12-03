@@ -127,7 +127,7 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: |
           # Delete the secure note for this cluster
-          op item delete "EKS-development-*" --vault Infrastructure || true
+          op item delete "EKS-development-*" --vault terraform || true
 ```
 
 #### Option 1 Pros
@@ -335,7 +335,7 @@ jobs:
           
           # Use 1Password CLI to create/update item
           op item create \
-            --vault "Infrastructure" \
+            --vault "terraform" \
             --category "secure_note" \
             --title "EKS-${ENVIRONMENT}-${CLUSTER_NAME}" \
             --tags "EKS,Kubernetes,${ENVIRONMENT},Terraform-Managed" \
@@ -351,11 +351,11 @@ jobs:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: |
           ENVIRONMENT="${{ inputs.environment }}"
-          op item list --vault "Infrastructure" --format json | \
+          op item list --vault "terraform" --format json | \
             jq -r ".[] | select(.title | startswith(\"EKS-${ENVIRONMENT}-\")) | .title" | \
             while read -r ITEM_TITLE; do
               echo "Deleting 1Password item: $ITEM_TITLE"
-              op item delete "$ITEM_TITLE" --vault "Infrastructure" || true
+              op item delete "$ITEM_TITLE" --vault "terraform" || true
             done
 ```
 
@@ -586,7 +586,7 @@ resource "aws_lambda_function" "onepassword_sync" {
   environment {
     variables = {
       OP_SERVICE_ACCOUNT_TOKEN = var.op_service_account_token  # From secrets manager
-      OP_VAULT                 = "Infrastructure"
+      OP_VAULT                 = "terraform"
     }
   }
 }
@@ -953,13 +953,13 @@ gh secret set OP_SERVICE_ACCOUNT_TOKEN --body "ops_..."
 ### 1Password Service Account Token
 
 - **Storage**: GitHub Secrets (encrypted at rest)
-- **Scope**: Read/write access to Infrastructure vault only
+- **Scope**: Read/write access to terraform vault only
 - **Rotation**: Rotate annually or after team member changes
 - **Audit**: 1Password logs all operations by service account
 
 ### Least Privilege
 
-- Service account only has access to Infrastructure vault
+- Service account only has access to terraform vault
 - Cannot access personal vaults or other shared vaults
 - Token is not logged in GitHub Actions output
 

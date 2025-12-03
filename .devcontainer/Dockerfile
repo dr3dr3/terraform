@@ -27,8 +27,14 @@ RUN apk add --no-cache docker-cli docker-cli-compose
 # Install LocalStack CLI (requires build dependencies for psutil)
 RUN apk add --no-cache py3-pip && \
     apk add --no-cache --virtual .build-deps gcc musl-dev python3-dev linux-headers && \
-    pip3 install --no-cache-dir --break-system-packages localstack awscli-local && \
+    pip3 install --no-cache-dir --break-system-packages localstack awscli-local checkov && \
     apk del .build-deps
+
+# Install TFLint
+RUN wget -O /tmp/tflint.zip https://github.com/terraform-linters/tflint/releases/download/v0.53.0/tflint_linux_amd64.zip && \
+    unzip /tmp/tflint.zip -d /usr/local/bin && \
+    rm /tmp/tflint.zip && \
+    chmod +x /usr/local/bin/tflint
 
 # Install 1Password CLI
 RUN echo https://downloads.1password.com/linux/alpinelinux/stable/ >> /etc/apk/repositories && \

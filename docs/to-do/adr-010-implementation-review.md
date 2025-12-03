@@ -1,6 +1,6 @@
 # ADR-010 Implementation Review: AWS IAM Role Structure
 
-**Review Date:** 2025-11-29
+**Review Date:** 2025-12-03
 
 **ADR Reviewed:** ADR-010-aws-iam-role-structure.md
 
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-This document captures the findings from reviewing the current Terraform codebase against ADR-010 (AWS IAM Role Structure for Terraform OIDC Authentication). The implementation is partially complete, with development environment well-structured but gaps in other environments and missing human roles.
+This document captures the findings from reviewing the current Terraform codebase against ADR-010 (AWS IAM Role Structure for Terraform OIDC Authentication). The implementation has progressed significantly since the last review, with comprehensive IAM Identity Center setup and EKS cluster admin functionality now in place. Development environment is well-structured, but gaps remain in staging/sandbox environments and human roles.
 
 ---
 
@@ -18,9 +18,9 @@ This document captures the findings from reviewing the current Terraform codebas
 
 Current code correctly implements environment separation:
 
-- `terraform/env-development/foundation-layer/iam-roles-for-terraform/` - Development account roles
-- `terraform/env-management/foundation-layer/terraform-cloud-oidc-role/` - Management account bootstrap role
-- Workspaces defined for staging and sandbox in `workspaces.tf`
+- `terraform/env-development/foundation-layer/iam-roles-for-terraform/` - Development account roles ✅
+- `terraform/env-management/foundation-layer/tfc-oidc-role/` - Management account bootstrap role ✅
+- Workspaces defined for staging and sandbox in `workspaces.tf` (code folders pending)
 
 ### 2. Execution Context Split (ADR Recommendation: Human vs CICD)
 
@@ -57,9 +57,62 @@ Excellent compliance! Roles include:
 - `Environment`, `Layer`, `Context`, `Name`, `Owner`
 - Missing: `ManagedBy` (present in some, not all), `Purpose` tag consistency
 
-### 7. IAM Identity Center Separation
+### 7. IAM Identity Center Separation (NEW - Fully Implemented!)
 
-`iam-roles-for-people/main.tf` correctly separates human console access via Permission Sets from Terraform OIDC roles - exactly as ADR recommends.
+`env-management/foundation-layer/iam-roles-for-people/main.tf` now provides comprehensive IAM Identity Center management:
+
+**Users:**
+
+- `andre.dreyer` user with full identity details
+
+**Groups (per ADR-015 User Personas):**
+
+- `Administrators` - Full access to all AWS services
+- `Platform-Engineers` - EKS/Infrastructure management (maps to K8s cluster-admin)
+- `Namespace-Admins` - Namespace-scoped control
+- `Developers` - Application deployment focus
+- `Auditors` - Read-only compliance access
+
+**Permission Sets:**
+
+- `AdministratorAccess` (existing, referenced via data source)
+- `PlatformEngineerAccess` - 8hr session, EKS/VPC management
+- `NamespaceAdminAccess` - 8hr session, EKS describe + ECR
+- `DeveloperAccess` - 12hr session, EKS describe + ECR + CloudWatch
+- `AuditorAccess` - 12hr session, ReadOnlyAccess + Cost Explorer
+
+**Account Assignments:**
+
+- Administrators → All accounts
+- Platform Engineers → All accounts
+- Namespace Admins → Non-production accounts only
+- Developers → Non-production accounts only
+- Auditors → All accounts (compliance access)
+
+This excellently separates human console access via Permission Sets from Terraform OIDC roles - exactly as ADR recommends.
+
+### 8. EKS Cluster Admin (NEW - Implemented!)
+
+`env-management/foundation-layer/eks-cluster-admin/main.tf` provides:
+
+- 1Password integration for EKS cluster connection details
+- Stores cluster name, endpoint, region, ARN, OIDC provider URL
+- Supports dev, staging, production, and sandbox environments
+- Uses TFC outputs to read EKS cluster state
+- Per ADR-016: Phase 1.2 Terraform to 1Password Integration
+
+### 9. GitHub Actions OIDC (Dual Implementation - Corrected!)
+
+GitHub Actions OIDC roles are now correctly implemented in both accounts:
+
+- `env-management/foundation-layer/gha-oidc/` - Management account (workspace: `management-github-actions-oidc`)
+- `env-development/foundation-layer/gha-oidc/` - Development account (workspace: `development-foundation-gha-oidc`)
+
+Both create:
+
+- GitHub Actions OIDC provider
+- `github-actions-dev-platform` IAM role
+- Trust policy scoped to specific GitHub repo
 
 ---
 
@@ -71,20 +124,26 @@ Excellent compliance! Roles include:
 
 **Current State:** Only CICD roles exist (`-cicd-role`). No human roles for developer terminal usage.
 
-**Impact:** Developers cannot run Terraform locally with appropriate OIDC authentication. The management account's `terraform-cloud-oidc-role` has a wildcard subject (`workspace:*`) which is too permissive.
+**Impact:** Developers cannot run Terraform locally with appropriate OIDC authentication. However, the IAM Identity Center permission sets now provide console access for human users, which partially addresses this.
 
-### 2. Missing Staging & Production Roles
+**Note:** The management account's `terraform-cloud-oidc-role` trust policy allows human role patterns:
 
-**ADR Requires:** Roles for all environments (dev, staging, production)
+```hcl
+"arn:aws:iam::*:role/terraform-*-*-human-role"
+```
+
+### 2. Missing Staging, Sandbox & Production Roles
+
+**ADR Requires:** Roles for all environments (dev, staging, production, sandbox)
 
 **Current State:**
 
-- ✅ Development: `env-development/foundation-layer/iam-roles-for-terraform/` exists
-- ❌ Staging: Only workspace defined, no actual role code
-- ❌ Production: No role code found
-- ❌ Sandbox: Only workspace defined, no actual role code
+- ✅ Development: `env-development/foundation-layer/iam-roles-for-terraform/` exists with OIDC provider and layer roles
+- ❌ Staging: Workspace defined (`staging-foundation-iam-roles`), code folder missing
+- ❌ Sandbox: Workspace defined (`sandbox-foundation-iam-roles`), code folder missing
+- ❌ Production: No workspace or role code found
 
-The `workspaces.tf` references paths like `terraform/env-staging/foundation-layer/iam-roles-for-terraform` but those directories don't exist.
+The `workspaces.tf` references paths like `terraform/env-staging/foundation-layer/iam-roles-for-terraform` but those directories don't exist yet.
 
 ### 3. No Permission Boundaries
 
@@ -92,7 +151,7 @@ The `workspaces.tf` references paths like `terraform/env-staging/foundation-laye
 
 **Current State:** The module `terraform-oidc-role` has `permission_boundary_arn` variable but it's not being used in `env-development/foundation-layer/iam-roles-for-terraform/main.tf`.
 
-### 4. Bootstrap Role Too Permissive
+### 4. Bootstrap Role Scope (Improved but still broad)
 
 **ADR Risk:** "Over-permissive role in production"
 
@@ -104,9 +163,13 @@ StringLike = {
 }
 ```
 
-This allows **any** workspace in the organization to assume this role.
+This allows **any** workspace in the organization to assume this role. However, the role's IAM policy is now more appropriately scoped to:
 
-**Recommendation:** Scope to specific projects or use separate roles per environment.
+- IAM Identity Center operations (identitystore, sso, ssoadmin)
+- OIDC provider management
+- Terraform-specific IAM roles only (`terraform-*`, `github-actions-*`)
+
+**Recommendation:** Consider scoping to specific projects or create separate roles per environment.
 
 ### 5. Inconsistent Use of Reusable Module
 
@@ -115,11 +178,16 @@ You have a well-designed module at `terraform-modules/terraform-oidc-role/` but:
 - `env-development/foundation-layer/iam-roles-for-terraform/main.tf` creates roles **inline** instead of using the module
 - This leads to code duplication as you scale to staging/production
 
-### 6. GitHub Actions Roles in Wrong Account
+### 6. ~~GitHub Actions Roles in Wrong Account~~ (RESOLVED)
 
-**Potential Issue:** `env-management/foundation-layer/github-actions-oidc-role/` creates a role named `github-actions-dev-platform` in the **management** account, but the comments say it's for development EKS.
+**Previous Issue:** `env-management/foundation-layer/github-actions-oidc-role/` created a role in the wrong account.
 
-The development account version in `env-development/foundation-layer/github-actions-oidc-role/` is correct - OIDC provider must be in the target account.
+**Current State:** Both accounts now have their own GitHub Actions OIDC setup:
+
+- `env-management/foundation-layer/gha-oidc/` → workspace: `management-github-actions-oidc`
+- `env-development/foundation-layer/gha-oidc/` → workspace: `development-foundation-gha-oidc`
+
+**Note:** Both create `github-actions-dev-platform` role. The management account version may be redundant unless there's a cross-account use case. Consider clarifying the purpose or removing duplicate.
 
 ### 7. Missing CloudTrail Monitoring/Alerting
 
@@ -133,67 +201,79 @@ The development account version in `env-development/foundation-layer/github-acti
 
 | ADR Requirement | Status | Notes |
 |-----------------|--------|-------|
-| Environment-based roles (dev/staging/prod) | ⚠️ Partial | Only dev implemented, others missing |
-| Execution context split (cicd/human) | ⚠️ Partial | Only CICD roles exist |
+| Environment-based roles (dev/staging/prod) | ⚠️ Partial | Only dev implemented, staging/sandbox/prod missing |
+| Execution context split (cicd/human) | ⚠️ Partial | Only CICD roles exist; IAM Identity Center covers console access |
 | Layer-based subdivision | ✅ Good | Implemented for dev environment |
 | Trust policy conditions | ✅ Good | Correct OIDC conditions |
 | Session duration guidelines | ⚠️ | 2hr for all; dev could be longer |
 | Permission boundaries | ❌ Missing | Variable exists but not used |
 | Tagging compliance | ✅ Good | Most tags present |
-| IAM Identity Center separation | ✅ Good | Properly separated |
+| IAM Identity Center separation | ✅ Excellent | Full persona-based setup with 5 groups and permission sets |
+| EKS Cluster Admin | ✅ New | 1Password integration for cluster connection details |
+| GitHub Actions OIDC | ✅ Good | Both management and development accounts configured |
 | CloudTrail monitoring | ❌ Missing | No audit infrastructure |
-| Documentation/helper scripts | ❌ Missing | ADR mentions developer guides |
+| Documentation/helper scripts | ⚠️ Partial | Some docs exist, more needed |
 
 ---
 
 ## 🔧 Recommended Actions
 
-### Priority 1: Create missing environment roles
+### Priority 1: Create missing environment roles (HIGH)
 
 - Copy `env-development/foundation-layer/iam-roles-for-terraform/` to staging, sandbox, and production
 - Adjust permissions (production should be more restrictive)
 
-### Priority 2: Add human roles
+### Priority 2: Add human roles (MEDIUM)
 
 - Create `terraform-{env}-{layer}-human-role` for each layer
 - Use IdP group claims for trust policy conditions
+- Note: IAM Identity Center permission sets already provide console access
 
-### Priority 3: Use the reusable module
+### Priority 3: Use the reusable module (MEDIUM)
 
 - Refactor `env-development/foundation-layer/iam-roles-for-terraform/` to use `terraform-modules/terraform-oidc-role/`
 - This ensures consistency across environments
 
-### Priority 4: Implement permission boundaries
+### Priority 4: Implement permission boundaries (LOW)
 
 - Create a permission boundary policy that caps maximum permissions
 - Attach to all terraform roles
 
-### Priority 5: Tighten bootstrap role
+### Priority 5: Tighten bootstrap role (LOW)
 
 - Scope `terraform-cloud-oidc-role` to specific projects instead of wildcards
 - Or create separate management-account roles per use case
+- Note: IAM policy is already scoped to appropriate resources
 
-### Priority 6: Add audit infrastructure
+### Priority 6: Add audit infrastructure (LOW)
 
 - CloudTrail configuration for `AssumeRole` events
 - CloudWatch alarms for unexpected role assumptions
 
-### Priority 7: Cleanup duplicate GitHub Actions code
+### Priority 7: Clarify GitHub Actions OIDC setup (LOW)
 
-- Delete `env-management/foundation-layer/github-actions-oidc-role/` (creates dev role in wrong account)
-- Keep only `env-development/foundation-layer/github-actions-oidc-role/`
+- Review if both management and development accounts need `github-actions-dev-platform` role
+- Rename management account role if it serves a different purpose
+- Document the purpose of each GitHub Actions role
 
 ---
 
 ## 📈 ADR Implementation Phase Assessment
 
-Based on current code, implementation is between **Phase 1 and Phase 3**:
+Based on current code, implementation is between **Phase 2 and Phase 3**:
 
-- Jumped to Phase 3 (layer-based) for development
-- Haven't completed Phase 1 (all environments) for staging/production
-- Missing Phase 2 (human/cicd split) everywhere
+- ✅ Phase 1 (basic environment separation): Complete for development
+- ⚠️ Phase 1 incomplete: Missing staging/sandbox/production
+- ✅ Phase 2 (human/cicd context): IAM Identity Center provides human access via permission sets
+- ✅ Phase 3 (layer-based): Implemented for development with foundation/platform/applications roles
 
-**Recommendation:** Complete Phase 1 for all environments first, then add human roles (Phase 2) before expanding layer-based roles (Phase 3) to other environments.
+**Significant Progress:**
+
+- IAM Identity Center now fully configured with 5 user personas
+- EKS Cluster Admin provides 1Password integration for cluster access
+- GitHub Actions OIDC configured in both management and development accounts
+
+**Recommendation:** Complete Phase 1 for all environments (staging, sandbox, production) before adding more complexity.
 
 ---
 
@@ -202,10 +282,11 @@ Based on current code, implementation is between **Phase 1 and Phase 3**:
 1. [ ] Create staging IAM roles (`env-staging/foundation-layer/iam-roles-for-terraform/`)
 2. [ ] Create sandbox IAM roles (`env-sandbox/foundation-layer/iam-roles-for-terraform/`)
 3. [ ] Create production IAM roles (`env-production/foundation-layer/iam-roles-for-terraform/`)
-4. [ ] Add human roles for development environment
-5. [ ] Refactor to use `terraform-modules/terraform-oidc-role/` module
-6. [ ] Implement permission boundaries
-7. [ ] Tighten management account bootstrap role
-8. [ ] Add CloudTrail monitoring terraform code
-9. [ ] Remove duplicate GitHub Actions role from management account
-10. [ ] Create developer documentation for role usage
+4. [x] ~~IAM Identity Center setup~~ - COMPLETE (groups, permission sets, account assignments)
+5. [x] ~~EKS Cluster Admin for 1Password~~ - COMPLETE
+6. [x] ~~GitHub Actions OIDC in development account~~ - COMPLETE
+7. [ ] Refactor to use `terraform-modules/terraform-oidc-role/` module
+8. [ ] Add human roles for Terraform CLI usage (optional - IAM Identity Center covers console)
+9. [ ] Implement permission boundaries
+10. [ ] Add CloudTrail monitoring terraform code
+11. [ ] Review/clarify duplicate GitHub Actions OIDC setup in management account

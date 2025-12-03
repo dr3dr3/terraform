@@ -37,37 +37,35 @@ Per ADR-016, only non-sensitive cluster connection details are stored:
 
 ## Configuration
 
-### Authentication: CLI Mode
+### Authentication
 
-This workspace uses the 1Password CLI (`op`) with a Service Account Token. It must be run locally (or on a machine with `op` CLI installed), not in Terraform Cloud's standard remote runners.
+This workspace uses the 1Password Terraform provider with a **Service Account Token**. The token is passed via the `onepassword_service_account_token` variable, which can be set via:
+
+- `TF_VAR_onepassword_service_account_token` environment variable (recommended)
+- `-var="onepassword_service_account_token=..."` command line flag
+- `terraform.tfvars` file (NOT recommended for sensitive values)
 
 **Prerequisites:**
 
-1. Install the [1Password CLI](https://developer.1password.com/docs/cli/get-started/)
-2. Create a [Service Account](https://developer.1password.com/docs/service-accounts/) with access to the target vault
-3. Set the TFC workspace to **Local Execution Mode**
+1. Create a [Service Account](https://developer.1password.com/docs/service-accounts/) with access to the target vault
+2. Note the service account token (`ops_...`)
 
-**Setup:**
+**Local Development:**
 
-1. **Set TFC to Local Execution Mode:**
-   - Go to: [Workspace Settings](https://app.terraform.io/app/Datafaced/workspaces/management-foundation-eks-cluster-admin/settings/general)
-   - Under **Execution Mode**, select **Local**
-   - Save settings
+```bash
+# Set the environment variable
+export TF_VAR_onepassword_service_account_token="ops_..."
 
-2. **Set the environment variable:**
+# Run Terraform
+cd terraform/env-management/foundation-layer/eks-cluster-admin
+terraform init
+terraform plan
+terraform apply
+```
 
-   ```bash
-   export OP_SERVICE_ACCOUNT_TOKEN="ops_..."
-   ```
+**GitHub Actions:**
 
-3. **Run Terraform:**
-
-   ```bash
-   cd terraform/env-management/foundation-layer/eks-cluster-admin
-   terraform init
-   terraform plan
-   terraform apply
-   ```
+The `OP_SERVICE_ACCOUNT_TOKEN` secret is automatically passed to Terraform via `TF_VAR_onepassword_service_account_token` in the reusable workflow.
 
 ### Terraform Variables
 
@@ -93,8 +91,10 @@ aws_account_id_development = "123456789012"
 2. Create a 1Password service account with access to the vault
 
 3. Set up the environment:
-   - Set the TFC workspace execution mode to **Local** (see Configuration section)
-   - Set `OP_SERVICE_ACCOUNT_TOKEN` environment variable locally
+
+   ```bash
+   export TF_VAR_onepassword_service_account_token="ops_..."
+   ```
 
 4. Run Terraform:
 
@@ -127,8 +127,8 @@ From the eks-admin devcontainer:
 
 ```bash
 # Read cluster details from 1Password
-CLUSTER_NAME=$(op read "op://Infrastructure/EKS-development-dev-eks/cluster_name")
-CLUSTER_REGION=$(op read "op://Infrastructure/EKS-development-dev-eks/cluster_region")
+CLUSTER_NAME=$(op read "op://terraform/EKS-development-dev-eks/cluster_name")
+CLUSTER_REGION=$(op read "op://terraform/EKS-development-dev-eks/cluster_region")
 
 # Update kubeconfig
 aws eks update-kubeconfig --region $CLUSTER_REGION --name $CLUSTER_NAME
@@ -157,7 +157,7 @@ aws eks update-kubeconfig --region $CLUSTER_REGION --name $CLUSTER_NAME
                ▼
 ┌─────────────────────────────┐
 │       1Password Vault       │
-│     "Infrastructure"        │
+│        "terraform"          │
 │  ┌─────────────────────────┐│
 │  │ EKS-development-*       ││
 │  │ EKS-staging-*           ││

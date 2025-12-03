@@ -152,7 +152,7 @@ This approach provides the best security posture while maintaining a smooth deve
 Store EKS cluster connection details in 1Password with consistent naming:
 
 ```text
-Vault: Infrastructure (or Kubernetes-Clusters)
+Vault: terraform
 Item: EKS-{environment}-{cluster-name}
 Category: Server
 
@@ -221,7 +221,7 @@ cd terraform/env-development/platform-layer/eks-auto-mode
 
 # Create 1Password item with cluster details
 op item create \
-  --vault "Infrastructure" \
+  --vault "terraform" \
   --category "server" \
   --title "EKS-development-$(terraform output -raw cluster_name)" \
   "cluster_name=$(terraform output -raw cluster_name)" \
@@ -371,7 +371,7 @@ OP_SERVICE_ACCOUNT_TOKEN="op://Automation/EKS-Admin-Service-Account/credential"
 AWS_PROFILE="development"
 
 # Default 1Password vault for cluster details
-OP_VAULT="Infrastructure"
+OP_VAULT="terraform"
 ```
 
 #### 2.5 Setup Kubeconfig Script
@@ -389,7 +389,7 @@ OP_VAULT="Infrastructure"
 #   ./scripts/setup-kubeconfig.fish           # Set up all clusters
 #   ./scripts/setup-kubeconfig.fish --list    # List available clusters without configuring
 
-set -l VAULT (set -q OP_VAULT; and echo $OP_VAULT; or echo "Infrastructure")
+set -l VAULT (set -q OP_VAULT; and echo $OP_VAULT; or echo "terraform")
 set -l LIST_ONLY false
 
 # Parse arguments
@@ -401,7 +401,7 @@ if set -q _flag_help
     echo ""
     echo "Options:"
     echo "  --list, -l       List available EKS clusters without configuring"
-    echo "  --vault, -v      Specify 1Password vault (default: Infrastructure)"
+    echo "  --vault, -v      Specify 1Password vault (default: terraform)"
     echo "  --help, -h       Show this help message"
     exit 0
 end
