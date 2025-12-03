@@ -3,11 +3,12 @@
 # =============================================================================
 # Copy this file to terraform.tfvars and fill in the values.
 #
-# IMPORTANT: This workspace uses CLI Mode (1Password CLI)
-# -----------------------------------------------------
-# 1. Set TFC workspace execution mode to "Local"
-# 2. Set OP_SERVICE_ACCOUNT_TOKEN environment variable
-# 3. Run terraform locally (not in TFC remote runners)
+# 1Password Authentication:
+# -------------------------
+# The 1Password service account token can be set via:
+# - TF_VAR_onepassword_service_account_token environment variable
+# - -var="onepassword_service_account_token=..." command line flag
+# - terraform.tfvars file (NOT recommended for sensitive values)
 #
 # See README.md for detailed setup instructions.
 # =============================================================================
@@ -16,6 +17,8 @@
 tfc_organization = "Datafaced"
 
 # 1Password Configuration
+# Set via TF_VAR_onepassword_service_account_token environment variable
+# onepassword_service_account_token = "ops_..." # DO NOT commit real tokens!
 onepassword_vault_name = "terraform"
 
 # AWS Configuration
@@ -23,7 +26,7 @@ aws_region = "ap-southeast-2"
 
 # AWS Account IDs
 # Replace with actual account IDs or use 1Password references
-# aws_account_id_development = "op://Infrastructure/AWS-Development/account_id"
+# aws_account_id_development = "op://terraform/AWS-Development/account_id"
 aws_account_id_development = "126350206316"
 aws_account_id_staging     = ""
 aws_account_id_production  = ""

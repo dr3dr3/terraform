@@ -1,58 +1,225 @@
-Setting up Terraform for a new greenfield infrastructure project across separate AWS accounts (Dev, Staging, and Production) requires several key architectural decisions, primarily focused on isolation, modularity, security, and consistent deployment workflows.
+# Architecture Decisions Tracker
 
-Here are the key architectural decisions regarding your Terraform setup:
+> Status of key architectural decisions for our Terraform infrastructure project.
+
+**Last Updated**: December 3, 2025
+
+---
+
+## Quick Summary
+
+| Category | Status | ADRs |
+|----------|--------|------|
+| Environment Isolation | ✅ Decided | ADR-001, ADR-009, ADR-011 |
+| State Management | ✅ Decided | ADR-001 |
+| Modularity & Code Structure | ⚠️ Partially Addressed | ADR-003, ADR-009 |
+| Security & Authentication | ✅ Decided | ADR-005, ADR-006, ADR-007, ADR-008, ADR-010, ADR-015 |
+| Deployment Workflow | ✅ Decided | ADR-002, ADR-014 |
+| Automated Testing | 🔴 Needs ADR | - |
+| Module Versioning Strategy | 🔴 Needs ADR | - |
+| Sandbox Cleanup Automation | ⏳ Proposed | ADR-012 |
+
+---
+
+## Decisions Still Needing Attention
+
+### 🔴 HIGH PRIORITY: Automated Testing Strategy
+
+**Status**: No ADR exists
+
+**What's needed**: An ADR defining our approach to infrastructure testing:
+
+- Static analysis tools (TFLint, Checkov, tfsec)
+- Pre-commit hooks configuration
+- Unit testing for Terraform modules (using `terraform test` or Terratest)
+- Integration testing approach using Sandbox account
+- Smoke testing after deployments
+- CI/CD pipeline integration for automated testing
+
+**Reference**: See [`docs/explanations/guide-to-testing-terraform.md`](../explanations/guide-to-testing-terraform.md) for comprehensive guidance.
+
+**Recommended ADR scope**:
+
+| Test Type | Tool Options | When to Run |
+|-----------|--------------|-------------|
+| Static Analysis | `terraform fmt`, `terraform validate`, TFLint | Pre-commit, CI |
+| Security Scanning | Checkov, tfsec, Trivy | Pre-commit, CI |
+| Policy Enforcement | Sentinel (Terraform Cloud) | CI, pre-apply |
+| Unit Testing | Terraform native `test` command | CI |
+| Integration Testing | Terratest (Go) in Sandbox account | CI, on merge |
+| Smoke Testing | Custom scripts post-apply | Post-deployment |
+
+---
+
+### 🔴 HIGH PRIORITY: Module Versioning Strategy
+
+**Status**: No ADR exists
+
+**Current state**: Reusable modules exist in `terraform-modules/` but lack a versioning strategy:
+
+```text
+terraform-modules/
+├── permission-set/
+└── terraform-oidc-role/
+```
+
+**What's needed**: An ADR defining:
+
+- Git tagging convention for module versions (e.g., `module-name/v1.0.0`)
+- Semantic versioning rules (when to bump major/minor/patch)
+- How environments reference specific module versions
+- Module release and promotion process
+- Breaking change communication
+
+**Best practice reference**:
+
+```hcl
+# Recommended: Pin to specific version
+module "oidc_role" {
+  source = "git::https://github.com/dr3dr3/terraform.git//terraform-modules/terraform-oidc-role?ref=terraform-oidc-role/v1.2.0"
+}
+
+# NOT recommended: Using main branch
+module "oidc_role" {
+  source = "git::https://github.com/dr3dr3/terraform.git//terraform-modules/terraform-oidc-role?ref=main"
+}
+```
+
+---
+
+### ⏳ PENDING APPROVAL: Sandbox Automated Cleanup (ADR-012)
+
+**Status**: Proposed (not yet Approved)
+
+**Summary**: Defines hybrid approach using Terraform Destroy + AWS Nuke v3 for automated resource cleanup in sandbox environment.
+
+**Action needed**: Review and approve ADR-012 to enable implementation.
+
+---
+
+## Decisions Already Made ✅
 
 ### 1. Environment Isolation Strategy
 
-Given you are using **separate AWS accounts** for each environment (Dev, Staging, Production), you must ensure strong isolation, especially for state management.
+| Decision | Status | ADR |
+|----------|--------|-----|
+| **Terraform Cloud for state management** | ✅ Approved | [ADR-001](../reference/architecture-decision-register/ADR-001-terraform-state-management.md) |
+| **Directory-based environment isolation** | ✅ Approved | [ADR-009](../reference/architecture-decision-register/ADR-009-folder-structure.md) |
+| **Sandbox environment for experimentation** | ✅ Approved | [ADR-011](../reference/architecture-decision-register/ADR-011-sandbox-environment.md) |
 
-| Decision | Details & Best Practices |
-| :--- | :--- |
-| **Use Separate Backends for Each Environment** | Using multiple, distinct Terraform backends (S3 buckets) is critical for isolating state between Dev, Staging, and Production. This provides **stronger isolation** than using Terraform workspaces. The default remote backend for AWS is **Amazon S3** for secure storage and DynamoDB for locking. |
-| **Adopt Directory/File Layout for Isolation** | For isolating environments (staging vs. production), directories/folders are the preferable structure over Terraform *workspaces*. Workspaces should be avoided for environment separation because they typically use the same backend authentication and lack visibility, making accidental deployments easier. |
-| **Implement a Standard File Structure** | Your infrastructure should be organized with **separate folders** for each environment (e.g., `stage`, `prod`) and **separate folders for each component** (e.g., `vpc`, `services`, `data-storage`) within that environment. This setup isolates state files, limiting the "blast radius" of errors. |
+**Implementation**:
+
+- Separate TFC workspaces per environment/layer (not Terraform workspaces)
+- Folder structure: `env-{environment}/{layer}-layer/{stack}/`
+- Workspace naming: `{environment}-{layer}-{stack}`
+- State isolation via separate TFC workspaces with RBAC
+
+---
 
 ### 2. State Management and Security
 
-Since the Terraform state file stores the mapping of configured resources and may contain sensitive data, securing it is paramount.
+| Decision | Status | ADR |
+|----------|--------|-----|
+| **Use Terraform Cloud** (not S3 backend) | ✅ Approved | [ADR-001](../reference/architecture-decision-register/ADR-001-terraform-state-management.md) |
 
-| Decision | Details & Best Practices |
-| :--- | :--- |
-| **Enable Remote State and Locking** | Use a **remote backend** (Amazon S3) to store the state files in a shared, central location. Use **Amazon DynamoDB** alongside S3 to implement state locking, which prevents race conditions and corruption when multiple team members attempt concurrent updates. |
-| **Secure State Files** | Ensure remote state storage (S3) is configured with **server-side encryption (SSE)**. |
-| **Restrict Production Access** | Lock down permissions for the **Production state backend** to **read-only access** for most users. Limit who can modify the production infrastructure state to the automated CI/CD pipeline or designated *break-glass* roles. |
-| **Enable S3 Versioning** | Enable versioning on your S3 state bucket so that every revision of your state file is stored, allowing you to roll back if necessary. |
+**Key points**:
+
+- ✅ Remote state with automatic locking (built into TFC)
+- ✅ Encrypted state storage (managed by TFC)
+- ✅ State versioning and rollback (built into TFC)
+- ✅ RBAC for production access controls (TFC Teams)
+- ✅ Audit logging (TFC audit logs)
+
+---
 
 ### 3. Modularity and Code Structure
 
-Modularity is key for writing "production-grade" code, minimizing duplication, and enabling maintainability and testing.
+| Decision | Status | ADR |
+|----------|--------|-----|
+| **Infrastructure monorepo with layered approach** | ✅ Approved | [ADR-003](../reference/architecture-decision-register/ADR-003-infra-layering-repository-structure.md) |
+| **Environments → Layers → Stacks folder pattern** | ✅ Approved | [ADR-009](../reference/architecture-decision-register/ADR-009-folder-structure.md) |
+| **Tooling separation (Terraform/Helm/K8s)** | ✅ Approved | [ADR-004](../reference/architecture-decision-register/ADR-004-infra-tooling-separation.md) |
 
-| Decision | Details & Best Practices |
-| :--- | :--- |
-| **Adopt a Multi-Repository Approach** | Maintain at least two separate Git repositories: one for your reusable, versioned **modules** (the "blueprints") and one for the **live infrastructure** configurations (the "houses") that call those modules in Dev/Staging/Production folders. |
-| **Design Small, Composable Modules** | Modules should be **small, self-contained, and composable**. They should logically group related resources and abstract complexity. Aim for modules that handle one thing (e.g., a rolling ASG cluster, a specific database component). |
-| **Implement Module Versioning** | Use Git tags (e.g., `v0.0.1`) to version your reusable modules. This is crucial for **safely promoting changes**: you can deploy and test a new version (e.g., `v0.0.2`) in Staging before applying it to Production. |
-| **Define a Module API** | Use **input variables** (module arguments) to configure modules for different environments (e.g., different instance sizes in Staging vs. Production). Use **output variables** to expose necessary resource attributes to other configurations (like exposing a database address to a web cluster module). |
-| **Centralize Provider Configuration** | Do not define `provider` blocks within your reusable modules (this is an antipattern). Provider configuration (like AWS region or `assume_role` blocks) should be declared **once in the root/live module**. Modules should declare required providers and accept provider references from the calling module if they need multi-provider interactions. |
+**Implementation**:
+
+- Single repo with `terraform/` directory containing environment folders
+- Reusable modules in `terraform-modules/` at repo root
+- Layers: Foundation → Platform → Shared Services → Applications
+- Cross-layer references via `terraform_remote_state` or `tfe_outputs`
+
+**Gap**: Module versioning strategy not yet defined (see above).
+
+---
 
 ### 4. Security and Authentication
 
-Security controls are vital, especially when provisioning across multiple sensitive AWS accounts.
+| Decision | Status | ADR |
+|----------|--------|-----|
+| **OIDC authentication** (no static credentials) | ✅ Approved | [ADR-010](../reference/architecture-decision-register/ADR-010-aws-iam-role-structure.md) |
+| **Tiered IAM role structure** | ✅ Approved | [ADR-010](../reference/architecture-decision-register/ADR-010-aws-iam-role-structure.md) |
+| **AWS Secrets Manager** for secrets | ✅ Approved | [ADR-005](../reference/architecture-decision-register/ADR-005-secrets-manager.md) |
+| **Per-environment KMS keys** | ✅ Approved | [ADR-006](../reference/architecture-decision-register/ADR-006-kms-key-management.md) |
+| **Environment-scoped IAM policies** | ✅ Approved | [ADR-007](../reference/architecture-decision-register/ADR-007-iam-for-parameter-store.md) |
+| **Secret rotation strategies** | ✅ Approved | [ADR-008](../reference/architecture-decision-register/ADR-008-secret-rotation.md) |
+| **User personas (AWS SSO + EKS RBAC)** | ✅ Approved | [ADR-015](../reference/architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md) |
+| **EKS credentials via 1Password** | ✅ Approved | [ADR-016](../reference/architecture-decision-register/ADR-016-eks-credentials-cross-repo-access.md) |
 
-| Decision | Details & Best Practices |
-| :--- | :--- |
-| **Use IAM Roles for Authentication** | **Avoid hardcoding static access keys** in configuration files. Instead, prefer using **IAM roles** (e.g., instance profiles for EC2, or roles assumed by CI/CD) which grant temporary, rotating credentials and follow the principle of **least privilege**. |
-| **Multi-Account Authentication** | To deploy resources across different AWS accounts from a central management process, use provider blocks with the `alias` parameter and the `assume_role` configuration. |
-| **Protect Sensitive Input Variables** | Use environment variables (prefixed with `TF_VAR_`) or dedicated secret stores (like AWS Secrets Manager) to pass sensitive data (such as database passwords) to Terraform without storing them in code or state files. |
+**Implementation**:
+
+- GitHub Actions uses OIDC federation
+- Separate roles: `terraform-{env}-cicd-role` vs `terraform-{env}-human-role`
+- IAM Identity Center for human AWS access
+- 5-tier persona model (Administrator, Platform Engineer, Namespace Admin, Developer, Auditor)
+
+---
 
 ### 5. Deployment Workflow and Automation
 
-A systematic and automated workflow reduces human error and ensures consistency.
+| Decision | Status | ADR |
+|----------|--------|-----|
+| **VCS-driven workflow** (mono-branch + directories) | ✅ Approved | [ADR-002](../reference/architecture-decision-register/ADR-002-terraform-workflow-git-cicd.md) |
+| **Tiered trigger strategy** (CLI/VCS/API) | ✅ Approved | [ADR-014](../reference/architecture-decision-register/ADR-014-terraform-workspace-triggers.md) |
+| **EKS + 1Password lifecycle coordination** | ✅ Approved | [ADR-017](../reference/architecture-decision-register/ADR-017-eks-1password-lifecycle-coordination.md) |
 
-| Decision | Details & Best Practices |
-| :--- | :--- |
-| **Automate via CI/CD** | All Terraform infrastructure deployments should be run from a **CI server** (e.g., GitHub Actions, CircleCI) rather than a developer's local machine. This ensures a consistent environment and centralized permission management. |
-| **Implement Plan Review Gates** | For deployments to Staging and Production, the workflow should include an approval step where `terraform plan` output is **manually reviewed and approved** before `terraform apply` is executed. This provides a final safety check, as infrastructure changes can be costly. |
-| **Integrate Automated Testing** | Incorporate different testing types into your workflow: **static analysis** (using tools like `terraform validate`, TFLint, Checkov) to find errors preemptively and integration/end-to-end tests (using tools like Terratest) that deploy and validate infrastructure in an isolated test account. |
-| **Enforce Coding Standards** | Enforce consistent Terraform formatting and style using tools like `terraform fmt` in your CI/CD pipeline or via pre-commit hooks. Use governance guardrails, such as Sentinel policies, to enforce organizational standards (e.g., requiring specific tags on resources). |
-| **Pin All Dependency Versions** | Explicitly pin the versions for **Terraform core**, the **AWS Provider**, and all **reusable modules** to ensure compatibility and predictability. The provider version constraints should be defined in a `versions.tf` file using the `required_providers` block. |
+**Implementation**:
+
+- Main branch with environment directories
+- Dev auto-apply, Production manual approval
+- Foundation layers: CLI-driven (manual control)
+- Application/Platform layers: Mixed VCS/API triggers
+- TTL-based auto-destroy for ephemeral resources
+
+**Gap**: Automated testing not yet integrated into CI/CD (see above).
+
+---
+
+## Reference: Best Practices Checklist
+
+Use this checklist when creating new stacks or modules:
+
+### Per-Stack Checklist
+
+- [ ] `backend.tf` with TFC workspace configuration
+- [ ] `versions.tf` with pinned Terraform and provider versions
+- [ ] `variables.tf` with descriptions and validation rules
+- [ ] `outputs.tf` exposing necessary values for downstream stacks
+- [ ] `README.md` documenting purpose and usage
+- [ ] Required tags defined in `locals.tf`
+
+### Per-Module Checklist
+
+- [ ] Clear `README.md` with examples
+- [ ] Input variables with descriptions, types, and defaults
+- [ ] Output values for resource attributes
+- [ ] No `provider` blocks (provider-agnostic)
+- [ ] `examples/` directory with usage examples
+- [ ] Version tag applied (once versioning ADR is approved)
+
+---
+
+## Related Documentation
+
+- [ADR Index](../reference/adr-index.md) - Complete list of architecture decisions
+- [Terraform Best Practices](./terraform-best-practices.md) - Tactical patterns and conventions
+- [Guide to Testing Terraform](../explanations/guide-to-testing-terraform.md) - Comprehensive testing guidance
+- [Architecture Principles](../reference/architecture-principles.md) - Guiding principles

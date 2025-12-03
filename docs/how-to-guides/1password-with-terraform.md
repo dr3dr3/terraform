@@ -139,12 +139,12 @@ Reference existing 1Password items in your Terraform code:
 ```hcl
 # Read existing secrets
 data "onepassword_item" "github_token" {
-  vault = "Infrastructure"
+  vault = "terraform"
   title = "GitHub OAuth Token"
 }
 
 data "onepassword_item" "datadog_api_key" {
-  vault = "Infrastructure"
+  vault = "terraform"
   title = "Datadog API Key"
 }
 
@@ -186,11 +186,11 @@ Create a template file that won't be committed:
 
 ```bash
 # .envrc.template (commit this)
-export TF_VAR_github_token="op://Infrastructure/GitHub-OAuth-Token/credential"
-export TF_VAR_datadog_api_key="op://Infrastructure/Datadog/api_key"
-export TF_VAR_datadog_app_key="op://Infrastructure/Datadog/app_key"
-export AWS_ACCESS_KEY_ID="op://Infrastructure/AWS-Terraform-User/access_key_id"
-export AWS_SECRET_ACCESS_KEY="op://Infrastructure/AWS-Terraform-User/secret_access_key"
+export TF_VAR_github_token="op://terraform/GitHub-OAuth-Token/credential"
+export TF_VAR_datadog_api_key="op://terraform/Datadog/api_key"
+export TF_VAR_datadog_app_key="op://terraform/Datadog/app_key"
+export AWS_ACCESS_KEY_ID="op://terraform/AWS-Terraform-User/access_key_id"
+export AWS_SECRET_ACCESS_KEY="op://terraform/AWS-Terraform-User/secret_access_key"
 ```
 
 ### Using op run
@@ -272,7 +272,7 @@ variable "datadog_app_key" {
 
 1. Go to 1Password → Settings → Service Accounts
 2. Create a new service account with descriptive name: `terraform-cicd`
-3. Grant access to specific vaults (e.g., "Infrastructure")
+3. Grant access to specific vaults (e.g., "terraform")
 4. Copy the service account token (starts with `ops_`)
 
 ### Store in GitHub Secrets
@@ -346,22 +346,22 @@ jobs:
 
 ```hcl
 # terraform.tfvars.template (commit this)
-aws_account_id         = "op://Infrastructure/AWS-Accounts/production_account_id"
-aws_region             = "op://Infrastructure/AWS-Config/default_region"
-environment            = "op://Infrastructure/Environment-Config/name"
-project_name           = "op://Infrastructure/Project-Config/name"
-eks_cluster_name       = "op://Infrastructure/EKS-Config/cluster_name"
-vpc_cidr               = "op://Infrastructure/Network-Config/vpc_cidr"
+aws_account_id         = "op://terraform/AWS-Accounts/production_account_id"
+aws_region             = "op://terraform/AWS-Config/default_region"
+environment            = "op://terraform/Environment-Config/name"
+project_name           = "op://terraform/Project-Config/name"
+eks_cluster_name       = "op://terraform/EKS-Config/cluster_name"
+vpc_cidr               = "op://terraform/Network-Config/vpc_cidr"
 
 # Organization details
-organization_name      = "op://Infrastructure/Organization/name"
-cost_center           = "op://Infrastructure/Organization/cost_center"
-team_name             = "op://Infrastructure/Organization/team_name"
+organization_name      = "op://terraform/Organization/name"
+cost_center           = "op://terraform/Organization/cost_center"
+team_name             = "op://terraform/Organization/team_name"
 
 # Non-sensitive but environment-specific
-datadog_site          = "op://Infrastructure/Datadog/site"
-log_retention_days    = "op://Infrastructure/Logging-Config/retention_days"
-backup_retention_days = "op://Infrastructure/Backup-Config/retention_days"
+datadog_site          = "op://terraform/Datadog/site"
+log_retention_days    = "op://terraform/Logging-Config/retention_days"
+backup_retention_days = "op://terraform/Backup-Config/retention_days"
 ```
 
 ### Store Values in 1Password
@@ -369,7 +369,7 @@ backup_retention_days = "op://Infrastructure/Backup-Config/retention_days"
 Create an item in 1Password with these fields:
 
 ```text
-Vault: Infrastructure
+Vault: terraform
 Item: AWS-Accounts
 Fields:
   - production_account_id: 123456789012
@@ -468,7 +468,7 @@ variable "environment" {
 Structure your vaults and items logically:
 
 ```text
-Infrastructure Vault
+terraform Vault
 ├── AWS-Accounts (account IDs for all environments)
 ├── AWS-Config (regions, default settings)
 ├── GitHub-OAuth-Token (for Terraform provider)
@@ -487,8 +487,8 @@ Use consistent 1Password secret reference format:
 
 ```text
 op://[vault-name]/[item-name]/[field-name]
-op://Infrastructure/GitHub-OAuth-Token/credential
-op://Infrastructure/AWS-Accounts/production_account_id
+op://terraform/GitHub-OAuth-Token/credential
+op://terraform/AWS-Accounts/production_account_id
 ```
 
 ### Template Files in Git
@@ -560,7 +560,7 @@ This repository uses 1Password for secrets management. See [docs/1password-terra
 
 ### Required 1Password Items
 
-Ensure you have access to these items in the Infrastructure vault:
+Ensure you have access to these items in the terraform vault:
 - GitHub-OAuth-Token
 - AWS-Accounts
 - Datadog
@@ -586,13 +586,13 @@ echo $OP_SERVICE_ACCOUNT_TOKEN
 
 ```bash
 # Test a specific reference
-op read "op://Infrastructure/GitHub-OAuth-Token/credential"
+op read "op://terraform/GitHub-OAuth-Token/credential"
 
 # Verify item exists
-op item list --vault Infrastructure
+op item list --vault terraform
 
 # Check field names
-op item get "GitHub-OAuth-Token" --vault Infrastructure
+op item get "GitHub-OAuth-Token" --vault terraform
 ```
 
 ### Template File Errors
@@ -618,7 +618,7 @@ op inject -i terraform.tfvars.template
     echo "Testing vault access..."
     op vault list
     echo "Testing item read..."
-    op item get "GitHub-OAuth-Token" --vault Infrastructure
+    op item get "GitHub-OAuth-Token" --vault terraform
 ```
 
 ### Permission Errors

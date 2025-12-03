@@ -21,8 +21,8 @@ name: "EKS: TTL Check & Auto-Destroy"
 
 on:
   schedule:
-    # Run every 6 hours to check for expired clusters
-    - cron: "30 */6 * * *"
+    # Run daily at 10pm AEST (12:00 UTC)
+    - cron: "0 12 * * *"
 
   workflow_dispatch:
     inputs:

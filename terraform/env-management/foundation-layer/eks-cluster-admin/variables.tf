@@ -15,17 +15,20 @@ variable "tfc_organization" {
 # -----------------------------------------------------------------------------
 # 1Password Configuration
 # -----------------------------------------------------------------------------
-# This workspace uses CLI Mode which requires:
-# 1. The `op` CLI binary installed locally
-# 2. OP_SERVICE_ACCOUNT_TOKEN environment variable set
-#
-# Run this workspace locally - it does NOT work in TFC standard runners.
+# The 1Password provider uses service account token authentication.
+# Pass the token via TF_VAR_onepassword_service_account_token or -var flag.
 # -----------------------------------------------------------------------------
+
+variable "onepassword_service_account_token" {
+  description = "1Password Service Account Token for authentication"
+  type        = string
+  sensitive   = true
+}
 
 variable "onepassword_vault_name" {
   description = "Name of the 1Password vault to store EKS cluster details"
   type        = string
-  default     = "Infrastructure"
+  default     = "terraform"
 }
 
 # -----------------------------------------------------------------------------

@@ -2,69 +2,69 @@
 
 ## Repository Structure Overview
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                       INFRASTRUCTURE MONOREPO                                │
-│                    (terraform-infrastructure/)                               │
-│                                                                              │
+│                       INFRASTRUCTURE MONOREPO                               │
+│                    (terraform-infrastructure/)                              │
+│                                                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │ Layer 01: Foundation (Rarely Changes - Quarterly)                       │ │
-│  │ ├── environments/                                                       │ │
+│  │ Layer 01: Foundation (Rarely Changes - Quarterly)                      │ │
+│  │ ├── environments/                                                      │ │
 │  │ │   ├── dev/          → TF Cloud Workspace: aws-foundation-dev         │ │
 │  │ │   ├── staging/      → TF Cloud Workspace: aws-foundation-staging     │ │
 │  │ │   └── production/   → TF Cloud Workspace: aws-foundation-production  │ │
 │  │ └── Outputs: vpc_id, subnet_ids, security_groups                       │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
-│                               │                                              │
+│                               │                                             │
 │                    ┌──────────┴──────────┐                                  │
-│                    ▼                     ▼                                   │
-│  ┌────────────────────────────┐ ┌──────────────────────────────────────┐   │
-│  │ Layer 02: Platform         │ │ Layer 03: Shared Services            │   │
-│  │ (Monthly Changes)          │ │ (Monthly Changes)                    │   │
-│  │ ├── environments/          │ │ ├── environments/                    │   │
-│  │ │   ├── dev/               │ │ │   ├── dev/                         │   │
-│  │ │   ├── staging/           │ │ │   ├── staging/                     │   │
-│  │ │   └── production/        │ │ │   └── production/                  │   │
-│  │ └── EKS, CI/CD, Monitoring │ │ └── Databases, Caches, Queues        │   │
-│  └────────────────────────────┘ └──────────────────────────────────────┘   │
-│                    │                     │                                   │
-│                    └──────────┬──────────┘                                   │
-│                               ▼                                              │
+│                    ▼                     ▼                                  │
+│  ┌────────────────────────────┐ ┌──────────────────────────────────────┐    │
+│  │ Layer 02: Platform         │ │ Layer 03: Shared Services            │    │
+│  │ (Monthly Changes)          │ │ (Monthly Changes)                    │    │
+│  │ ├── environments/          │ │ ├── environments/                    │    │
+│  │ │   ├── dev/               │ │ │   ├── dev/                         │    │
+│  │ │   ├── staging/           │ │ │   ├── staging/                     │    │
+│  │ │   └── production/        │ │ │   └── production/                  │    │
+│  │ └── EKS, CI/CD, Monitoring │ │ └── Databases, Caches, Queues        │    │
+│  └────────────────────────────┘ └──────────────────────────────────────┘    │
+│                    │                     │                                  │
+│                    └──────────┬──────────┘                                  │
+│                               ▼                                             │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │ Layer 04: Applications (Weekly Changes for Scaling/Config)              │ │
-│  │ ├── service-a/                                                          │ │
-│  │ │   ├── environments/                                                   │ │
+│  │ Layer 04: Applications (Weekly Changes for Scaling/Config)             │ │
+│  │ ├── service-a/                                                         │ │
+│  │ │   ├── environments/                                                  │ │
 │  │ │   │   ├── dev/          → TF Cloud Workspace: aws-service-a-dev      │ │
 │  │ │   │   ├── staging/      → TF Cloud Workspace: aws-service-a-staging  │ │
 │  │ │   │   └── production/   → TF Cloud Workspace: aws-service-a-prod     │ │
-│  │ ├── service-b/                                                          │ │
-│  │ │   ├── environments/     (Same structure)                              │ │
-│  │ └── service-c/                                                          │ │
-│  │     └── environments/     (Same structure)                              │ │
-│  │                                                                          │ │
-│  │ Note: This defines INFRASTRUCTURE for apps (ECS tasks, scaling, IAM)    │ │
-│  │       NOT the application code itself                                   │ │
+│  │ ├── service-b/                                                         │ │
+│  │ │   ├── environments/     (Same structure)                             │ │
+│  │ └── service-c/                                                         │ │
+│  │     └── environments/     (Same structure)                             │ │
+│  │                                                                        │ │
+│  │ Note: This defines INFRASTRUCTURE for apps (ECS tasks, scaling, IAM)   │ │
+│  │       NOT the application code itself                                  │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      APPLICATION CODE REPOSITORIES                           │
-│                        (Separate from Infrastructure)                        │
-│                                                                              │
-│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐               │
-│  │   service-a/   │  │   service-b/   │  │   service-c/   │               │
-│  │   ├── src/     │  │   ├── src/     │  │   ├── src/     │               │
-│  │   ├── tests/   │  │   ├── tests/   │  │   ├── tests/   │               │
-│  │   ├── Docker   │  │   ├── Docker   │  │   ├── Docker   │               │
-│  │   └── .github/ │  │   └── .github/ │  │   └── .github/ │               │
-│  │       └── CI/CD│  │       └── CI/CD│  │       └── CI/CD│               │
-│  └────────────────┘  └────────────────┘  └────────────────┘               │
-│         │                   │                   │                            │
-│         └───────────────────┴───────────────────┘                            │
-│                             │                                                │
-│                             ▼                                                │
+│                      APPLICATION CODE REPOSITORIES                          │
+│                        (Separate from Infrastructure)                       │
+│                                                                             │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐                 │
+│  │   service-a/   │  │   service-b/   │  │   service-c/   │                 │
+│  │   ├── src/     │  │   ├── src/     │  │   ├── src/     │                 │
+│  │   ├── tests/   │  │   ├── tests/   │  │   ├── tests/   │                 │
+│  │   ├── Docker   │  │   ├── Docker   │  │   ├── Docker   │                 │
+│  │   └── .github/ │  │   └── .github/ │  │   └── .github/ │                 │
+│  │       └── CI/CD│  │       └── CI/CD│  │       └── CI/CD│                 │
+│  └────────────────┘  └────────────────┘  └────────────────┘                 │
+│         │                   │                   │                           │
+│         └───────────────────┴───────────────────┘                           │
+│                             │                                               │
+│                             ▼                                               │
 │            Deploys: Docker images (Daily/Hourly)                            │
-│            Infrastructure: ZERO Terraform involvement                        │
+│            Infrastructure: ZERO Terraform involvement                       │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,7 +72,7 @@
 
 ### Type 1: Application Code Deployment (Daily/Hourly)
 
-```
+```bash
 Developer                     Application Repo               AWS ECS
     │                              │                           │
     │  1. Code change              │                           │
@@ -100,7 +100,7 @@ Note: ZERO interaction with terraform-infrastructure repo
 
 ### Type 2: Application Scaling (Weekly/As Needed)
 
-```
+```bash
 Platform Team           Infra Repo                  Terraform Cloud      AWS
     │                       │                              │              │
     │  1. Update scaling    │                              │              │
@@ -128,7 +128,7 @@ Platform Team           Infra Repo                  Terraform Cloud      AWS
 
 ### Type 3: New Infrastructure Component (Monthly)
 
-```
+```bash
 Platform Team           Infra Repo                  Terraform Cloud      AWS
     │                       │                              │              │
     │  1. Add new service   │                              │              │
@@ -159,7 +159,7 @@ Platform Team           Infra Repo                  Terraform Cloud      AWS
 
 ### Type 4: Foundation Changes (Quarterly)
 
-```
+```absh
 Platform Team           Infra Repo                  Terraform Cloud      AWS
     │                       │                              │              │
     │  1. Major change      │                              │              │
@@ -197,12 +197,12 @@ Platform Team           Infra Repo                  Terraform Cloud      AWS
 
 ## Layer Dependency Management with terraform_remote_state
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────────┐
-│                  Layer 01: Foundation                                │
+│                  Layer 01: Foundation                               │
 │  State: aws-foundation-production                                   │
-│                                                                      │
-│  outputs.tf:                                                         │
+│                                                                     │
+│  outputs.tf:                                                        │
 │    output "vpc_id" { value = aws_vpc.main.id }                      │
 │    output "private_subnet_ids" { value = [...] }                    │
 │    output "security_group_app" { value = aws_sg.app.id }            │
@@ -230,69 +230,69 @@ Platform Team           Infra Repo                  Terraform Cloud      AWS
 ┌─────────────────────────────────────────────────────────────────────┐
 │ Layer 04: Application - Service A                                   │
 │ State: aws-service-a-production                                     │
-│                                                                      │
-│ main.tf:                                                             │
+│                                                                     │
+│ main.tf:                                                            │
 │   # Get outputs from all dependent layers                           │
 │   data "terraform_remote_state" "foundation" {                      │
-│     backend = "remote"                                               │
-│     config = {                                                       │
-│       organization = "your-org"                                      │
+│     backend = "remote"                                              │
+│     config = {                                                      │
+│       organization = "your-org"                                     │
 │       workspaces = { name = "aws-foundation-production" }           │
-│     }                                                                │
-│   }                                                                  │
-│                                                                      │
+│     }                                                               │
+│   }                                                                 │
+│                                                                     │
 │   data "terraform_remote_state" "platform" {                        │
-│     backend = "remote"                                               │
-│     config = {                                                       │
-│       organization = "your-org"                                      │
+│     backend = "remote"                                              │
+│     config = {                                                      │
+│       organization = "your-org"                                     │
 │       workspaces = { name = "aws-platform-production" }             │
-│     }                                                                │
-│   }                                                                  │
-│                                                                      │
+│     }                                                               │
+│   }                                                                 │
+│                                                                     │
 │   data "terraform_remote_state" "shared_services" {                 │
-│     backend = "remote"                                               │
-│     config = {                                                       │
-│       organization = "your-org"                                      │
+│     backend = "remote"                                              │
+│     config = {                                                      │
+│       organization = "your-org"                                     │
 │       workspaces = { name = "aws-shared-services-production" }      │
-│     }                                                                │
-│   }                                                                  │
-│                                                                      │
+│     }                                                               │
+│   }                                                                 │
+│                                                                     │
 │   # Use outputs from other layers                                   │
 │   resource "aws_ecs_service" "app" {                                │
 │     cluster = data.terraform_remote_state.platform.outputs          │
-│                    .ecs_cluster_id                                   │
-│                                                                      │
-│     network_configuration {                                          │
+│                    .ecs_cluster_id                                  │
+│                                                                     │
+│     network_configuration {                                         │
 │       subnets = data.terraform_remote_state.foundation.outputs      │
-│                      .private_subnet_ids                             │
-│       security_groups = [                                            │
+│                      .private_subnet_ids                            │
+│       security_groups = [                                           │
 │         data.terraform_remote_state.foundation.outputs              │
-│              .security_group_app                                     │
-│       ]                                                              │
-│     }                                                                │
-│                                                                      │
-│     environment = [                                                  │
-│       {                                                              │
-│         name = "DATABASE_HOST"                                       │
+│              .security_group_app                                    │
+│       ]                                                             │
+│     }                                                               │
+│                                                                     │
+│     environment = [                                                 │
+│       {                                                             │
+│         name = "DATABASE_HOST"                                      │
 │         value = data.terraform_remote_state.shared_services         │
-│                      .outputs.postgres_endpoint                      │
-│       }                                                              │
-│     ]                                                                │
-│   }                                                                  │
-│                                                                      │
-│ outputs.tf:                                                          │
+│                      .outputs.postgres_endpoint                     │
+│       }                                                             │
+│     ]                                                               │
+│   }                                                                 │
+│                                                                     │
+│ outputs.tf:                                                         │
 │   output "service_discovery_arn" {                                  │
 │     description = "For other services to discover this one"         │
 │     value = aws_service_discovery_service.app.arn                   │
-│   }                                                                  │
+│   }                                                                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Inter-Service Dependencies
 
-```
+```bash
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Service A depends on Service B                                       │
+│ Service A depends on Service B                                      │
 └─────────────────────────────────────────────────────────────────────┘
 
 terraform-infrastructure/layers/04-applications/service-a/environments/production/main.tf:
@@ -327,7 +327,7 @@ resource "aws_ecs_task_definition" "service_a" {
 
 ### Strategy 1: Manual Scaling via Terraform (Good for Permanent Changes)
 
-```
+```bash
 1. Update terraform-infrastructure/layers/04-applications/service-a/
    environments/production/terraform.tfvars:
    
@@ -345,7 +345,8 @@ Cons: Takes 5-10 minutes (PR → review → apply)
 
 ### Strategy 2: Auto-Scaling (Best for Dynamic Workloads)
 
-```
+```bash
+
 Define in Terraform once, runs automatically:
 
 resource "aws_appautoscaling_policy" "cpu" {
@@ -364,7 +365,7 @@ Cons: Need to tune thresholds, can cause cost surprises
 
 ### Strategy 3: Emergency Manual Scaling (Bypass Terraform)
 
-```
+```bash
 For immediate response to incidents:
 
 aws ecs update-service \
@@ -385,7 +386,7 @@ Cons: Creates drift, must sync Terraform afterward
 
 ### Strategy 4: Scheduled Scaling (For Predictable Patterns)
 
-```
+```bash
 Define in Terraform:
 
 # Scale up for business hours
@@ -412,7 +413,7 @@ Cons: Need to adjust for holidays, doesn't handle unexpected spikes
 
 ## Complete Workflow Example: Adding a New Service
 
-```
+```bash
 Step 1: Platform team creates infrastructure
 ─────────────────────────────────────────────
 Repository: terraform-infrastructure
@@ -502,26 +503,31 @@ Option C: Emergency AWS CLI
 ## Benefits Summary
 
 ✅ **Clear Separation**
+
 - Infrastructure changes (Terraform) separate from code deployments (CI/CD)
 - Platform team manages infrastructure, app teams manage code
 - No confusion about which repo to update
 
 ✅ **Reduced Blast Radius**
+
 - Foundation changes don't affect applications directly
 - Application changes don't touch shared infrastructure
 - Each layer has separate state, no lock contention
 
 ✅ **Flexible Deployment**
+
 - Code deploys: Daily/hourly (fast, no Terraform)
 - Scaling: Multiple strategies (Terraform, auto-scaling, API)
 - Infrastructure: Carefully reviewed and tested
 
 ✅ **Scalable**
+
 - Easy to add new services (one directory in infra monorepo)
 - Team autonomy (app teams own their repos)
 - Platform control (platform team owns infrastructure patterns)
 
 ✅ **Manageable**
+
 - Fewer repositories than full multi-repo (1 infra + N apps vs 4 infra + 2N)
 - All infrastructure visible in one place
 - Clear ownership and dependencies
