@@ -1,36 +1,31 @@
 # =============================================================================
-# GitHub Actions Workflow: EKS Auto Mode - Development Platform
+# GitHub Actions Workflow: EKS Auto Mode - Staging Platform
 # =============================================================================
 # Per ADR-013: Uses OIDC federation to assume IAM role for Terraform operations
-# Per ADR-014: API/GHA trigger with manual provisioning for learning environments
+# Per ADR-014: Requires approval for apply operations in staging
 #
 # Triggers:
-#   - Push to main: Auto-apply (no manual approval for dev)
+#   - Push to main: Plan only (requires manual approval to apply)
 #   - Pull request: Plan only with PR comment
 #   - Manual: Plan, Apply, or Destroy via workflow_dispatch
-#
-# Cost Protection:
-#   - TTL-based auto-destroy: Clusters are tagged with creation time
-#   - Separate ttl-check workflow destroys clusters exceeding TTL
-#   - Default TTL: 8 hours (configurable via workflow input)
 # =============================================================================
 
-name: "Terraform: Dev Platform EKS"
+name: "Terraform: Staging Platform EKS"
 
 on:
   push:
     branches:
       - main
     paths:
-      - "terraform/env-development/platform-layer/eks-auto-mode/**"
-      - ".github/workflows/terraform-dev-platform-eks.yml"
+      - "terraform/env-staging/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-staging-platform-eks.yml"
 
   pull_request:
     branches:
       - main
     paths:
-      - "terraform/env-development/platform-layer/eks-auto-mode/**"
-      - ".github/workflows/terraform-dev-platform-eks.yml"
+      - "terraform/env-staging/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-staging-platform-eks.yml"
 
   workflow_dispatch:
     inputs:
@@ -46,12 +41,12 @@ on:
       ttl_hours:
         description: "Time-to-live in hours (0 = no auto-destroy)"
         required: false
-        default: "8"
+        default: "24"
         type: string
 
 # Ensure only one workflow runs at a time for this environment
 concurrency:
-  group: terraform-dev-platform-eks
+  group: terraform-staging-platform-eks
   cancel-in-progress: false
 
 # Required for OIDC authentication
@@ -73,11 +68,9 @@ jobs:
     steps:
       - name: Determine action based on trigger
         id: set-action
-        env:
-          DEFAULT_TTL_HOURS: "8"
         run: |
           ACTION="plan"
-          TTL_HOURS="${DEFAULT_TTL_HOURS}"
+          TTL_HOURS="24"  # Staging default: 24 hours
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             ACTION="${{ github.event.inputs.action }}"
@@ -85,7 +78,8 @@ jobs:
               TTL_HOURS="${{ github.event.inputs.ttl_hours }}"
             fi
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            ACTION="apply"
+            # Staging requires manual approval, so only plan on push
+            ACTION="plan"
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             ACTION="plan"
           fi
@@ -102,14 +96,14 @@ jobs:
     needs: determine-action
     uses: ./.github/workflows/reusable-terraform-eks.yml
     with:
-      environment: development
+      environment: staging
       action: ${{ needs.determine-action.outputs.action }}
       ttl_hours: ${{ needs.determine-action.outputs.ttl_hours }}
-      working_directory: terraform/env-development/platform-layer/eks-auto-mode
-      tf_workspace: development-platform-eks
-      require_approval: false  # Development auto-applies
+      working_directory: terraform/env-staging/platform-layer/eks-auto-mode
+      tf_workspace: staging-platform-eks
+      require_approval: true  # Staging requires approval
     secrets:
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV_PLATFORM }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_STAGING_PLATFORM }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
 
@@ -125,7 +119,7 @@ jobs:
       (needs.determine-action.outputs.action == 'apply' || needs.determine-action.outputs.action == 'destroy')
     uses: ./.github/workflows/reusable-1password-eks-sync.yml
     with:
-      environment: development
+      environment: staging
     secrets:
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}

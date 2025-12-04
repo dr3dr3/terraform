@@ -6,15 +6,20 @@
 # costs from forgotten clusters.
 #
 # How it works:
-# 1. Runs every hour (configurable via cron)
-# 2. Checks all EKS clusters for TTL tags (DestroyBy, TTL_Hours)
-# 3. If current time > DestroyBy, triggers destroy workflow
-# 4. Sends notification before destroying
+# 1. Runs daily (configurable via cron)
+# 2. Checks all EKS clusters in each environment for TTL tags
+# 3. If current time > DestroyBy, triggers destroy
+# 4. Syncs 1Password after cleanup
 #
 # Tags used:
 # - TTL_Hours: Number of hours cluster should live (0 = no auto-destroy)
 # - CreatedAt: ISO 8601 timestamp of cluster creation
 # - DestroyBy: ISO 8601 timestamp when cluster should be destroyed
+#
+# Supported Environments:
+# - Development: TTL auto-destroy enabled (default 8h)
+# - Staging: TTL auto-destroy enabled (default 24h)
+# - Production: TTL disabled by default (persistent clusters)
 # =============================================================================
 
 name: "EKS: TTL Check & Auto-Destroy"
@@ -64,6 +69,7 @@ jobs:
   check-development:
     name: "Check Development Clusters"
     runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'all' || github.event.inputs.environment == 'development' || github.event_name == 'schedule'
     outputs:
       expired_clusters: ${{ steps.check.outputs.expired_clusters }}
       should_destroy: ${{ steps.check.outputs.should_destroy }}
@@ -79,7 +85,7 @@ jobs:
       - name: Check cluster TTL
         id: check
         run: |
-          echo "## TTL Check Results 🕐" >> $GITHUB_STEP_SUMMARY
+          echo "## Development TTL Check 🕐" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # Get all EKS clusters
@@ -165,6 +171,142 @@ jobs:
           echo "should_destroy=$SHOULD_DESTROY" >> $GITHUB_OUTPUT
 
   # ===========================================================================
+  # Check TTL for Staging EKS Clusters
+  # ===========================================================================
+  check-staging:
+    name: "Check Staging Clusters"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'all' || github.event.inputs.environment == 'staging' || github.event_name == 'schedule'
+    outputs:
+      expired_clusters: ${{ steps.check.outputs.expired_clusters }}
+      should_destroy: ${{ steps.check.outputs.should_destroy }}
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING_PLATFORM }}
+          role-session-name: github-actions-ttl-check-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check cluster TTL
+        id: check
+        run: |
+          echo "## Staging TTL Check 🕐" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          CLUSTERS=$(aws eks list-clusters --query 'clusters[]' --output text 2>/dev/null || echo "")
+          
+          if [[ -z "$CLUSTERS" ]]; then
+            echo "No clusters found in staging account" >> $GITHUB_STEP_SUMMARY
+            echo "expired_clusters=" >> $GITHUB_OUTPUT
+            echo "should_destroy=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          CURRENT_TIME=$(date -u +%s)
+          EXPIRED_CLUSTERS=""
+          SHOULD_DESTROY="false"
+          
+          echo "### Clusters Checked" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Cluster | TTL Hours | Created At | Destroy By | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----------|------------|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          for CLUSTER in $CLUSTERS; do
+            CLUSTER_ARN=$(aws eks describe-cluster --name "$CLUSTER" --query 'cluster.arn' --output text 2>/dev/null || echo "")
+            
+            if [[ -z "$CLUSTER_ARN" ]]; then
+              echo "| $CLUSTER | N/A | N/A | N/A | ⚠️ Could not describe |" >> $GITHUB_STEP_SUMMARY
+              continue
+            fi
+            
+            TAGS=$(aws eks list-tags-for-resource --resource-arn "$CLUSTER_ARN" --query 'tags' --output json 2>/dev/null || echo "{}")
+            
+            TTL_HOURS=$(echo "$TAGS" | jq -r '.TTL_Hours // "not-set"')
+            CREATED_AT=$(echo "$TAGS" | jq -r '.CreatedAt // "unknown"')
+            DESTROY_BY=$(echo "$TAGS" | jq -r '.DestroyBy // "never"')
+            
+            if [[ "$DESTROY_BY" == "never" || "$DESTROY_BY" == "null" || "$TTL_HOURS" == "0" ]]; then
+              echo "| $CLUSTER | $TTL_HOURS | $CREATED_AT | $DESTROY_BY | ✅ No TTL |" >> $GITHUB_STEP_SUMMARY
+            elif [[ "$DESTROY_BY" != "not-set" && "$DESTROY_BY" != "unknown" ]]; then
+              DESTROY_BY_EPOCH=$(date -u -d "$DESTROY_BY" +%s 2>/dev/null || echo "0")
+              
+              if [[ "$DESTROY_BY_EPOCH" -gt 0 && "$CURRENT_TIME" -gt "$DESTROY_BY_EPOCH" ]]; then
+                HOURS_OVERDUE=$(( (CURRENT_TIME - DESTROY_BY_EPOCH) / 3600 ))
+                echo "| $CLUSTER | $TTL_HOURS | $CREATED_AT | $DESTROY_BY | 🚨 EXPIRED (${HOURS_OVERDUE}h overdue) |" >> $GITHUB_STEP_SUMMARY
+                EXPIRED_CLUSTERS="$EXPIRED_CLUSTERS $CLUSTER"
+                SHOULD_DESTROY="true"
+              else
+                HOURS_REMAINING=$(( (DESTROY_BY_EPOCH - CURRENT_TIME) / 3600 ))
+                echo "| $CLUSTER | $TTL_HOURS | $CREATED_AT | $DESTROY_BY | ⏳ ${HOURS_REMAINING}h remaining |" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              echo "| $CLUSTER | $TTL_HOURS | $CREATED_AT | $DESTROY_BY | ⚠️ No TTL tags |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          EXPIRED_CLUSTERS=$(echo "$EXPIRED_CLUSTERS" | xargs)
+          
+          if [[ -n "$EXPIRED_CLUSTERS" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ Expired Staging Clusters" >> $GITHUB_STEP_SUMMARY
+            for c in $EXPIRED_CLUSTERS; do
+              echo "- \`$c\`" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
+          
+          echo "expired_clusters=$EXPIRED_CLUSTERS" >> $GITHUB_OUTPUT
+          echo "should_destroy=$SHOULD_DESTROY" >> $GITHUB_OUTPUT
+
+  # ===========================================================================
+  # Check TTL for Production EKS Clusters (monitoring only - no auto-destroy)
+  # ===========================================================================
+  check-production:
+    name: "Check Production Clusters"
+    runs-on: ubuntu-latest
+    if: github.event.inputs.environment == 'all' || github.event.inputs.environment == 'production' || github.event_name == 'schedule'
+
+    steps:
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD_PLATFORM }}
+          role-session-name: github-actions-ttl-check-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check cluster status (monitoring only)
+        run: |
+          echo "## Production Cluster Status 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ℹ️ **Note:** Production clusters are NOT subject to TTL auto-destroy." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          CLUSTERS=$(aws eks list-clusters --query 'clusters[]' --output text 2>/dev/null || echo "")
+          
+          if [[ -z "$CLUSTERS" ]]; then
+            echo "No clusters found in production account" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "### Production Clusters" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Cluster | Status | Created At | Notes |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|------------|-------|" >> $GITHUB_STEP_SUMMARY
+          
+          for CLUSTER in $CLUSTERS; do
+            CLUSTER_INFO=$(aws eks describe-cluster --name "$CLUSTER" --query 'cluster' --output json 2>/dev/null || echo "{}")
+            STATUS=$(echo "$CLUSTER_INFO" | jq -r '.status // "unknown"')
+            CREATED=$(echo "$CLUSTER_INFO" | jq -r '.createdAt // "unknown"')
+            
+            if [[ "$STATUS" == "ACTIVE" ]]; then
+              echo "| $CLUSTER | ✅ $STATUS | $CREATED | Production cluster |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| $CLUSTER | ⚠️ $STATUS | $CREATED | Needs attention |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+  # ===========================================================================
   # Trigger Destroy for Expired Development Clusters
   # ===========================================================================
   destroy-development:
@@ -194,68 +336,123 @@ jobs:
       - name: Destroy expired clusters
         working-directory: terraform/env-development/platform-layer/eks-auto-mode
         run: |
-          echo "## TTL Auto-Destroy 🗑️" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Destroying clusters that exceeded their TTL..." >> $GITHUB_STEP_SUMMARY
+          echo "## Development TTL Auto-Destroy 🗑️" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Initialize Terraform
           terraform init
           
-          # Check if there's state to destroy
           if terraform state list 2>/dev/null | grep -q .; then
-            echo "### Destroying Resources" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
             terraform destroy -auto-approve -input=false
             
-            echo "✅ Destruction complete!" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Details" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Development cluster destroyed!" >> $GITHUB_STEP_SUMMARY
             echo "- **Reason:** TTL expired" >> $GITHUB_STEP_SUMMARY
             echo "- **Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-            echo "- **Expired Clusters:** ${{ needs.check-development.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Clusters:** ${{ needs.check-development.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
           else
             echo "No Terraform state found, nothing to destroy." >> $GITHUB_STEP_SUMMARY
           fi
 
   # ===========================================================================
-  # Dry Run Summary (when dry_run=true)
+  # Trigger Destroy for Expired Staging Clusters
+  # ===========================================================================
+  destroy-staging:
+    name: "Destroy Expired Staging Clusters"
+    runs-on: ubuntu-latest
+    needs: check-staging
+    if: |
+      needs.check-staging.outputs.should_destroy == 'true' &&
+      github.event.inputs.dry_run != 'true'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_STAGING_PLATFORM }}
+          role-session-name: github-actions-ttl-destroy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Destroy expired clusters
+        working-directory: terraform/env-staging/platform-layer/eks-auto-mode
+        run: |
+          echo "## Staging TTL Auto-Destroy 🗑️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          terraform init
+          
+          if terraform state list 2>/dev/null | grep -q .; then
+            terraform destroy -auto-approve -input=false
+            
+            echo "✅ Staging cluster destroyed!" >> $GITHUB_STEP_SUMMARY
+            echo "- **Reason:** TTL expired" >> $GITHUB_STEP_SUMMARY
+            echo "- **Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+            echo "- **Clusters:** ${{ needs.check-staging.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No Terraform state found, nothing to destroy." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ===========================================================================
+  # Dry Run Summary
   # ===========================================================================
   dry-run-summary:
     name: "Dry Run Summary"
     runs-on: ubuntu-latest
-    needs: check-development
+    needs: [check-development, check-staging]
     if: |
-      needs.check-development.outputs.should_destroy == 'true' &&
-      github.event.inputs.dry_run == 'true'
+      always() &&
+      github.event.inputs.dry_run == 'true' &&
+      (needs.check-development.outputs.should_destroy == 'true' || needs.check-staging.outputs.should_destroy == 'true')
 
     steps:
       - name: Dry run summary
         run: |
-          echo "## 🔍 Dry Run Mode" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Dry Run Mode - Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The following clusters would be destroyed if this was not a dry run:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Expired clusters:** ${{ needs.check-development.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "To actually destroy these clusters, run this workflow with \`dry_run: false\`" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ -n "${{ needs.check-development.outputs.expired_clusters }}" ]]; then
+            echo "### Development" >> $GITHUB_STEP_SUMMARY
+            echo "${{ needs.check-development.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [[ -n "${{ needs.check-staging.outputs.expired_clusters }}" ]]; then
+            echo "### Staging" >> $GITHUB_STEP_SUMMARY
+            echo "${{ needs.check-staging.outputs.expired_clusters }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "To destroy these clusters, run with \`dry_run: false\`" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Sync 1Password After TTL Destroy (Per ADR-017)
   # ===========================================================================
-  # When a cluster is destroyed due to TTL expiration, we need to clean up
-  # the corresponding 1Password secure note. The reusable workflow will:
-  # - Check TFC outputs for cluster existence
-  # - Since cluster is gone, Terraform will destroy the 1Password item (count=0)
-  # ===========================================================================
-  sync-1password-after-ttl-destroy:
-    name: "Sync 1Password (Post-TTL Cleanup)"
+  sync-1password-development:
+    name: "Sync 1Password (Dev)"
     needs: destroy-development
     if: needs.destroy-development.result == 'success'
     uses: ./.github/workflows/reusable-1password-eks-sync.yml
     with:
       environment: development
+    secrets:
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+
+  sync-1password-staging:
+    name: "Sync 1Password (Staging)"
+    needs: destroy-staging
+    if: needs.destroy-staging.result == 'success'
+    uses: ./.github/workflows/reusable-1password-eks-sync.yml
+    with:
+      environment: staging
     secrets:
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
