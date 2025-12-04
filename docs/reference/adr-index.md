@@ -2,7 +2,7 @@
 
 > Quick reference for all Architecture Decision Records. Read the full ADR for complete context.
 
-**Last Updated**: December 1, 2025
+**Last Updated**: December 4, 2025
 
 ---
 
@@ -25,6 +25,8 @@
 | [ADR-015](./architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md) | User Personas for AWS SSO and EKS RBAC | 5-tier persona model with least privilege | Approved | 2025-11-29 |
 | [ADR-016](./architecture-decision-register/ADR-016-eks-credentials-cross-repo-access.md) | EKS Cluster Credentials and Cross-Repository Access | Store cluster details in 1Password + AWS SSO for auth | Approved | 2025-12-01 |
 | [ADR-017](./architecture-decision-register/ADR-017-eks-1password-lifecycle-coordination.md) | EKS and 1Password Lifecycle Coordination | Terraform-managed conditional resources with reusable GHA workflow | Approved | 2025-12-03 |
+| [ADR-018](./architecture-decision-register/ADR-018-argocd-bootstrapping.md) | ArgoCD Bootstrapping Strategy for EKS Clusters | Terraform Helm Bootstrap with App of Apps Pattern | Approved | 2025-12-04 |
+| [ADR-019](./architecture-decision-register/ADR-019-argocd-implementation-options.md) | ArgoCD Implementation Options - EKS Capability vs Self-Managed | Hybrid approach: EKS Capability as primary, self-managed for advanced features | Approved | 2025-12-04 |
 
 ## Superseded Decisions
 

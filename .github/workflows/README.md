@@ -1,13 +1,25 @@
 # GitHub Actions Workflows
 
-This directory contains GitHub Actions workflows for Terraform infrastructure provisioning.
+This directory contains GitHub Actions workflows for Terraform infrastructure provisioning across all environments.
 
 ## Workflows
 
 | Workflow | File | Description |
 |----------|------|-------------|
-| Dev Platform EKS | `terraform-dev-platform-eks.yml` | Provisions EKS Auto Mode cluster in development |
-| EKS TTL Check | `eks-ttl-check.yml` | Hourly check for expired clusters (auto-destroy) |
+| Dev Platform EKS | `terraform-dev-platform-eks.yml` | Provisions EKS cluster in development (auto-apply) |
+| Staging Platform EKS | `terraform-staging-platform-eks.yml` | Provisions EKS cluster in staging (requires approval) |
+| Production Platform EKS | `terraform-prod-platform-eks.yml` | Provisions EKS cluster in production (requires approval + confirmation) |
+| EKS TTL Check | `eks-ttl-check.yml` | Daily check for expired clusters (auto-destroy for dev/staging) |
+| Reusable: Terraform EKS | `reusable-terraform-eks.yml` | Shared workflow for EKS operations |
+| Reusable: 1Password Sync | `reusable-1password-eks-sync.yml` | Syncs EKS details to 1Password |
+
+## Environment-Specific Behaviour
+
+| Environment | Auto-Apply on Push | Approval Required | TTL Default | Auto-Destroy |
+|-------------|-------------------|-------------------|-------------|--------------|
+| Development | ✅ Yes | ❌ No | 8 hours | ✅ Yes |
+| Staging | ❌ No | ✅ Yes | 24 hours | ✅ Yes |
+| Production | ❌ No | ✅ Yes + Confirmation | Never | ❌ No |
 
 ## Cost Protection: TTL-Based Auto-Destroy
 
@@ -65,18 +77,30 @@ All workflows use OIDC federation with AWS IAM for secure, short-lived credentia
 
 Configure these secrets in your GitHub repository settings:
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `AWS_ROLE_ARN_DEV_PLATFORM` | ARN of the IAM role for dev platform | `arn:aws:iam::123456789012:role/github-actions-dev-platform` |
-| `TF_API_TOKEN` | Terraform Cloud API token | `<your-token>` |
+| Secret | Description | Environment |
+|--------|-------------|-------------|
+| `AWS_ROLE_ARN_DEV_PLATFORM` | IAM role ARN for development platform | Development |
+| `AWS_ROLE_ARN_STAGING_PLATFORM` | IAM role ARN for staging platform | Staging |
+| `AWS_ROLE_ARN_PROD_PLATFORM` | IAM role ARN for production platform | Production |
+| `TF_API_TOKEN` | Terraform Cloud API token | All |
+| `OP_SERVICE_ACCOUNT_TOKEN` | 1Password Service Account token | All |
 
-### Getting the AWS Role ARN
+### Getting the AWS Role ARNs
 
-After applying the OIDC role Terraform:
+After applying the GHA OIDC role Terraform in each environment:
 
 ```bash
-cd terraform/env-management/foundation-layer/github-actions-oidc-role
-terraform output github_actions_dev_platform_role_arn
+# Development
+cd terraform/env-development/foundation-layer/gha-oidc
+terraform output github_actions_platform_role_arn
+
+# Staging
+cd terraform/env-staging/foundation-layer/gha-oidc
+terraform output github_actions_platform_role_arn
+
+# Production
+cd terraform/env-production/foundation-layer/gha-oidc
+terraform output github_actions_platform_role_arn
 ```
 
 ### Getting the Terraform Cloud Token
@@ -118,21 +142,32 @@ Create these environments in GitHub repository settings (**Settings** → **Envi
 
 | Environment | Purpose | Protection Rules |
 |-------------|---------|------------------|
-| `development` | EKS apply approval | Optional: require reviewers |
-| `development-destroy` | EKS destroy approval | **Required**: require reviewers |
+| `development` | EKS operations (optional) | None required |
+| `development-destroy` | EKS destroy approval | Optional: require reviewers |
+| `staging` | EKS apply approval | **Recommended**: require reviewers |
+| `staging-destroy` | EKS destroy approval | **Required**: require reviewers |
+| `production` | EKS apply approval | **Required**: require reviewers |
+| `production-destroy` | EKS destroy approval | **Required**: require reviewers + delay |
 
 ### Recommended Protection Rules
 
-For `development`:
+**Development:**
 
-- Optional reviewers (for awareness)
+- No required reviewers (auto-apply on push)
+- Destroy environment: optional reviewer
+
+**Staging:**
+
+- Required reviewers: 1
 - Restrict to `main` branch
+- Destroy environment: required reviewer
 
-For `development-destroy`:
+**Production:**
 
-- **Required reviewers** (at least 1)
+- Required reviewers: 2
 - Restrict to `main` branch
-- Add deployment delay (e.g., 5 minutes)
+- Deployment delay: 10 minutes
+- Destroy environment: 2 required reviewers + 30-minute delay
 
 ## Workflow Triggers
 
@@ -162,18 +197,39 @@ Use **Actions** → **Terraform: Dev Platform EKS** → **Run workflow**:
 ├── copilot-instructions.md    # AI assistant guidelines
 ├── workflows/
 │   ├── README.md              # This file
-│   ├── terraform-dev-platform-eks.yml
-│   └── eks-ttl-check.yml      # TTL-based auto-destroy
+│   ├── terraform-dev-platform-eks.yml      # Development EKS workflow
+│   ├── terraform-staging-platform-eks.yml  # Staging EKS workflow
+│   ├── terraform-prod-platform-eks.yml     # Production EKS workflow
+│   ├── eks-ttl-check.yml                   # TTL-based auto-destroy
+│   ├── reusable-terraform-eks.yml          # Shared EKS workflow
+│   └── reusable-1password-eks-sync.yml     # 1Password sync workflow
 ```
 
-## Extending for Other Environments
+## Architecture
 
-To add staging/production workflows:
-
-1. Create new IAM roles (e.g., `github-actions-staging-platform`)
-2. Add corresponding secrets (e.g., `AWS_ROLE_ARN_STAGING_PLATFORM`)
-3. Copy and modify the workflow file
-4. Create new environments with appropriate protection rules
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│                     Environment-Specific Workflows                    │
+├──────────────────┬──────────────────┬──────────────────────────────────┤
+│  Dev Platform    │  Staging Platform │  Production Platform            │
+│  EKS Workflow    │  EKS Workflow     │  EKS Workflow                   │
+│  (auto-apply)    │  (approval)       │  (approval + confirmation)      │
+└────────┬─────────┴────────┬──────────┴────────────┬─────────────────────┘
+         │                  │                       │
+         └──────────────────┼───────────────────────┘
+                            │
+                            ▼
+              ┌─────────────────────────────────┐
+              │   Reusable: Terraform EKS       │
+              │   (plan, apply, destroy)        │
+              └────────────────┬────────────────┘
+                               │
+                               ▼
+              ┌─────────────────────────────────┐
+              │   Reusable: 1Password Sync      │
+              │   (cluster details → 1Password) │
+              └─────────────────────────────────┘
+```
 
 ## Troubleshooting
 

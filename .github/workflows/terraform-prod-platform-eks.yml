@@ -1,36 +1,36 @@
 # =============================================================================
-# GitHub Actions Workflow: EKS Auto Mode - Development Platform
+# GitHub Actions Workflow: EKS Auto Mode - Production Platform
 # =============================================================================
 # Per ADR-013: Uses OIDC federation to assume IAM role for Terraform operations
-# Per ADR-014: API/GHA trigger with manual provisioning for learning environments
+# Per ADR-014: Requires approval for all operations in production
 #
 # Triggers:
-#   - Push to main: Auto-apply (no manual approval for dev)
+#   - Push to main: Plan only (requires manual approval to apply)
 #   - Pull request: Plan only with PR comment
 #   - Manual: Plan, Apply, or Destroy via workflow_dispatch
 #
-# Cost Protection:
-#   - TTL-based auto-destroy: Clusters are tagged with creation time
-#   - Separate ttl-check workflow destroys clusters exceeding TTL
-#   - Default TTL: 8 hours (configurable via workflow input)
+# Production Safety:
+#   - No TTL/auto-destroy (production clusters are persistent)
+#   - Requires approval for apply AND destroy
+#   - Extra confirmation step before destructive operations
 # =============================================================================
 
-name: "Terraform: Dev Platform EKS"
+name: "Terraform: Production Platform EKS"
 
 on:
   push:
     branches:
       - main
     paths:
-      - "terraform/env-development/platform-layer/eks-auto-mode/**"
-      - ".github/workflows/terraform-dev-platform-eks.yml"
+      - "terraform/env-production/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-prod-platform-eks.yml"
 
   pull_request:
     branches:
       - main
     paths:
-      - "terraform/env-development/platform-layer/eks-auto-mode/**"
-      - ".github/workflows/terraform-dev-platform-eks.yml"
+      - "terraform/env-production/platform-layer/eks-auto-mode/**"
+      - ".github/workflows/terraform-prod-platform-eks.yml"
 
   workflow_dispatch:
     inputs:
@@ -43,15 +43,14 @@ on:
           - plan
           - apply
           - destroy
-      ttl_hours:
-        description: "Time-to-live in hours (0 = no auto-destroy)"
+      confirm_production:
+        description: "Type 'PRODUCTION' to confirm production changes"
         required: false
-        default: "8"
         type: string
 
 # Ensure only one workflow runs at a time for this environment
 concurrency:
-  group: terraform-dev-platform-eks
+  group: terraform-prod-platform-eks
   cancel-in-progress: false
 
 # Required for OIDC authentication
@@ -69,30 +68,56 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       action: ${{ steps.set-action.outputs.action }}
-      ttl_hours: ${{ steps.set-action.outputs.ttl_hours }}
+      should_run: ${{ steps.set-action.outputs.should_run }}
     steps:
       - name: Determine action based on trigger
         id: set-action
-        env:
-          DEFAULT_TTL_HOURS: "8"
         run: |
           ACTION="plan"
-          TTL_HOURS="${DEFAULT_TTL_HOURS}"
+          SHOULD_RUN="true"
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             ACTION="${{ github.event.inputs.action }}"
-            if [[ -n "${{ github.event.inputs.ttl_hours }}" ]]; then
-              TTL_HOURS="${{ github.event.inputs.ttl_hours }}"
+            
+            # Require confirmation for apply/destroy in production
+            if [[ "$ACTION" != "plan" ]]; then
+              if [[ "${{ github.event.inputs.confirm_production }}" != "PRODUCTION" ]]; then
+                echo "❌ Production confirmation required. Please type 'PRODUCTION' to confirm." >> $GITHUB_STEP_SUMMARY
+                SHOULD_RUN="false"
+              fi
             fi
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            ACTION="apply"
+            # Production only plans on push, never auto-applies
+            ACTION="plan"
           elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             ACTION="plan"
           fi
 
           echo "action=$ACTION" >> $GITHUB_OUTPUT
-          echo "ttl_hours=$TTL_HOURS" >> $GITHUB_OUTPUT
-          echo "Determined action: $ACTION with TTL: ${TTL_HOURS}h"
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "Determined action: $ACTION"
+
+  # ===========================================================================
+  # Production Confirmation Gate
+  # ===========================================================================
+  confirm-production:
+    name: "Confirm Production"
+    runs-on: ubuntu-latest
+    needs: determine-action
+    if: |
+      needs.determine-action.outputs.should_run == 'false'
+    steps:
+      - name: Fail - Production confirmation required
+        run: |
+          echo "## ❌ Production Confirmation Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To perform **${{ needs.determine-action.outputs.action }}** in production:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Re-run this workflow manually" >> $GITHUB_STEP_SUMMARY
+          echo "2. Type \`PRODUCTION\` in the confirmation field" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This is a safety measure to prevent accidental production changes." >> $GITHUB_STEP_SUMMARY
+          exit 1
 
   # ===========================================================================
   # Call Reusable Terraform EKS Workflow
@@ -100,16 +125,17 @@ jobs:
   terraform:
     name: "Terraform"
     needs: determine-action
+    if: needs.determine-action.outputs.should_run == 'true'
     uses: ./.github/workflows/reusable-terraform-eks.yml
     with:
-      environment: development
+      environment: production
       action: ${{ needs.determine-action.outputs.action }}
-      ttl_hours: ${{ needs.determine-action.outputs.ttl_hours }}
-      working_directory: terraform/env-development/platform-layer/eks-auto-mode
-      tf_workspace: development-platform-eks
-      require_approval: false  # Development auto-applies
+      ttl_hours: "0"  # Production clusters never auto-destroy
+      working_directory: terraform/env-production/platform-layer/eks-auto-mode
+      tf_workspace: production-platform-eks
+      require_approval: true  # Production always requires approval
     secrets:
-      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV_PLATFORM }}
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_PROD_PLATFORM }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
 
@@ -125,7 +151,7 @@ jobs:
       (needs.determine-action.outputs.action == 'apply' || needs.determine-action.outputs.action == 'destroy')
     uses: ./.github/workflows/reusable-1password-eks-sync.yml
     with:
-      environment: development
+      environment: production
     secrets:
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}

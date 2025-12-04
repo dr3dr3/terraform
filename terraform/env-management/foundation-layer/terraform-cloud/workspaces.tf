@@ -359,7 +359,7 @@ resource "tfe_variable" "dev_foundation_iam_roles_role_arn" {
 # Staging - Foundation Layer - IAM Roles for Terraform
 # ADR-014: CLI-driven, Manual apply
 resource "tfe_workspace" "staging_foundation_iam_roles" {
-  name         = "staging-foundation-iam-roles"
+  name         = "staging-foundation-iam-roles-for-terraform"
   organization = data.tfe_organization.main.name
   project_id   = tfe_project.aws_staging.id
   description  = "OIDC provider and IAM roles for Terraform Cloud in staging account"
@@ -378,6 +378,222 @@ resource "tfe_workspace" "staging_foundation_iam_roles" {
     ManagedBy   = "Terraform-Cloud"
     Owner       = "Platform-Team"
     CICD        = "Cli" # ADR-014: CLI-driven trigger
+    Bootstrap   = "True"
+  }
+}
+
+# OIDC variables for staging_foundation_iam_roles - bootstrap workspace
+# Note: This role must be created manually first (bootstrap chicken-and-egg)
+resource "tfe_variable" "staging_foundation_iam_roles_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.staging_foundation_iam_roles.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "staging_foundation_iam_roles_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::163436765579:role/terraform-stg-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.staging_foundation_iam_roles.id
+  description  = "AWS IAM role ARN for OIDC authentication (bootstrap: create role manually first)"
+}
+
+# Staging - Foundation Layer - GitHub Actions OIDC Role
+# ADR-014: CLI-driven, Manual apply (Foundation layer = CLI)
+resource "tfe_workspace" "staging_foundation_gha_oidc" {
+  name         = "staging-foundation-gha-oidc"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_staging.id
+  description  = "GitHub Actions OIDC provider and IAM role for staging account"
+
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-staging/foundation-layer/gha-oidc"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Foundation requires manual approval
+
+  tags = {
+    Environment = "Staging"
+    Layer       = "Foundation"
+    AwsAccount  = "Staging"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
+  }
+}
+
+# OIDC variables for staging_foundation_gha_oidc
+resource "tfe_variable" "staging_foundation_gha_oidc_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.staging_foundation_gha_oidc.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "staging_foundation_gha_oidc_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::163436765579:role/terraform-stg-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.staging_foundation_gha_oidc.id
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
+
+# Staging - Platform Layer - EKS Auto Mode Cluster
+# ADR-014: API/GHA-driven, Manual apply (staging requires approval)
+resource "tfe_workspace" "staging_platform_eks" {
+  name         = "staging-platform-eks"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_staging.id
+  description  = "EKS Auto Mode cluster for staging environment"
+
+  # API/GHA-driven: No VCS repo - triggered by GitHub Actions workflow
+  # vcs_repo block intentionally omitted
+
+  working_directory = "terraform/env-staging/platform-layer/eks-auto-mode"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Staging requires manual approval
+
+  # Allow runs to be triggered externally (by GitHub Actions)
+  queue_all_runs = false
+
+  tags = {
+    Environment = "Staging"
+    Layer       = "Platform"
+    AwsAccount  = "Staging"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Github-Actions" # ADR-014: API/GHA-driven trigger
+    Workload    = "Eks"
+  }
+}
+
+################################################################################
+# Production Environment Workspaces
+################################################################################
+#
+# Per ADR-014:
+# - Foundation: CLI-driven, Manual apply
+# - Application: VCS-driven, Manual apply (speculative plans on PRs)
+# - Platform: API/GHA-driven, Manual apply (requires approval)
+#
+################################################################################
+
+# Production - Foundation Layer - IAM Roles for Terraform
+# ADR-014: CLI-driven, Manual apply
+resource "tfe_workspace" "production_foundation_iam_roles" {
+  name         = "production-foundation-iam-roles-for-terraform"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_production.id
+  description  = "OIDC provider and IAM roles for Terraform Cloud in production account"
+
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-production/foundation-layer/iam-roles-for-terraform"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Foundation requires manual approval
+
+  tags = {
+    Environment = "Production"
+    Layer       = "Foundation"
+    AwsAccount  = "Production"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
+    Bootstrap   = "True"
+  }
+}
+
+# OIDC variables for production_foundation_iam_roles - bootstrap workspace
+# Note: This role must be created manually first (bootstrap chicken-and-egg)
+resource "tfe_variable" "production_foundation_iam_roles_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.production_foundation_iam_roles.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "production_foundation_iam_roles_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::820485071161:role/terraform-prod-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.production_foundation_iam_roles.id
+  description  = "AWS IAM role ARN for OIDC authentication (bootstrap: create role manually first)"
+}
+
+# Production - Foundation Layer - GitHub Actions OIDC Role
+# ADR-014: CLI-driven, Manual apply (Foundation layer = CLI)
+resource "tfe_workspace" "production_foundation_gha_oidc" {
+  name         = "production-foundation-gha-oidc"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_production.id
+  description  = "GitHub Actions OIDC provider and IAM role for production account"
+
+  # CLI-driven: No VCS repo - operators explicitly initiate changes
+  # vcs_repo block intentionally omitted per ADR-014
+
+  working_directory = "terraform/env-production/foundation-layer/gha-oidc"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Foundation requires manual approval
+
+  tags = {
+    Environment = "Production"
+    Layer       = "Foundation"
+    AwsAccount  = "Production"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Cli" # ADR-014: CLI-driven trigger
+  }
+}
+
+# OIDC variables for production_foundation_gha_oidc
+resource "tfe_variable" "production_foundation_gha_oidc_auth" {
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  workspace_id = tfe_workspace.production_foundation_gha_oidc.id
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "production_foundation_gha_oidc_role_arn" {
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = "arn:aws:iam::820485071161:role/terraform-prod-foundation-cicd-role"
+  category     = "env"
+  workspace_id = tfe_workspace.production_foundation_gha_oidc.id
+  description  = "AWS IAM role ARN for OIDC authentication"
+}
+
+# Production - Platform Layer - EKS Auto Mode Cluster
+# ADR-014: API/GHA-driven, Manual apply (production always requires approval)
+resource "tfe_workspace" "production_platform_eks" {
+  name         = "production-platform-eks"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_production.id
+  description  = "EKS Auto Mode cluster for production environment"
+
+  # API/GHA-driven: No VCS repo - triggered by GitHub Actions workflow
+  # vcs_repo block intentionally omitted
+
+  working_directory = "terraform/env-production/platform-layer/eks-auto-mode"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Production always requires manual approval
+
+  # Allow runs to be triggered externally (by GitHub Actions)
+  queue_all_runs = false
+
+  tags = {
+    Environment = "Production"
+    Layer       = "Platform"
+    AwsAccount  = "Production"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Github-Actions" # ADR-014: API/GHA-driven trigger
+    Workload    = "Eks"
   }
 }
 

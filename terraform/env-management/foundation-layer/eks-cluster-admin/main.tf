@@ -33,7 +33,7 @@ provider "onepassword" {
 # Data Sources
 # =============================================================================
 
-data "onepassword_vault" "infrastructure" {
+data "onepassword_vault" "terraform_vault" {
   name = var.onepassword_vault_name
 }
 
@@ -80,7 +80,7 @@ data "tfe_outputs" "eks_sandbox" {
 resource "onepassword_item" "eks_development" {
   count = local.dev_cluster_exists ? 1 : 0
 
-  vault    = data.onepassword_vault.infrastructure.uuid
+  vault    = data.onepassword_vault.terraform_vault.uuid
   category = "secure_note"
   title    = "EKS-development-${local.dev_cluster_name}"
 
@@ -164,7 +164,7 @@ resource "onepassword_item" "eks_development" {
 resource "onepassword_item" "eks_staging" {
   count = local.staging_cluster_exists ? 1 : 0
 
-  vault    = data.onepassword_vault.infrastructure.uuid
+  vault    = data.onepassword_vault.terraform_vault.uuid
   category = "secure_note"
   title    = "EKS-staging-${local.staging_cluster_name}"
 
@@ -246,7 +246,7 @@ resource "onepassword_item" "eks_staging" {
 resource "onepassword_item" "eks_production" {
   count = local.prod_cluster_exists ? 1 : 0
 
-  vault    = data.onepassword_vault.infrastructure.uuid
+  vault    = data.onepassword_vault.terraform_vault.uuid
   category = "secure_note"
   title    = "EKS-production-${local.prod_cluster_name}"
 
@@ -328,7 +328,7 @@ resource "onepassword_item" "eks_production" {
 resource "onepassword_item" "eks_sandbox" {
   count = local.sandbox_cluster_exists ? 1 : 0
 
-  vault    = data.onepassword_vault.infrastructure.uuid
+  vault    = data.onepassword_vault.terraform_vault.uuid
   category = "secure_note"
   title    = "EKS-sandbox-${local.sandbox_cluster_name}"
 

@@ -1,0 +1,321 @@
+# =============================================================================
+# GitHub Actions Workflow: Reusable Terraform EKS
+# =============================================================================
+# A reusable workflow for managing EKS clusters across all environments.
+# Per ADR-013: Uses OIDC federation to assume IAM role for Terraform operations
+# Per ADR-014: API/GHA trigger with environment-specific approval requirements
+#
+# This workflow is called by environment-specific workflows with parameters
+# for the target environment, working directory, and AWS role.
+# =============================================================================
+
+name: "Reusable: Terraform EKS"
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment (development, staging, production)"
+        required: true
+        type: string
+      action:
+        description: "Terraform action to perform (plan, apply, destroy)"
+        required: true
+        type: string
+      ttl_hours:
+        description: "Time-to-live in hours (0 = no auto-destroy)"
+        required: false
+        type: string
+        default: "8"
+      working_directory:
+        description: "Terraform working directory"
+        required: true
+        type: string
+      tf_workspace:
+        description: "Terraform Cloud workspace name"
+        required: true
+        type: string
+      require_approval:
+        description: "Whether to require manual approval for apply/destroy"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      AWS_ROLE_ARN:
+        description: "AWS IAM role ARN for OIDC authentication"
+        required: true
+      TF_API_TOKEN:
+        description: "Terraform Cloud API token"
+        required: true
+      OP_SERVICE_ACCOUNT_TOKEN:
+        description: "1Password Service Account Token"
+        required: false
+
+env:
+  TF_CLOUD_ORGANIZATION: "Datafaced"
+  AWS_REGION: "ap-southeast-2"
+
+jobs:
+  # ===========================================================================
+  # Terraform Plan
+  # ===========================================================================
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    if: inputs.action != 'destroy'
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exitcode }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Format Check
+        id: fmt
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          terraform plan -no-color -input=false -out=tfplan \
+            -detailed-exitcode
+        continue-on-error: true
+
+      - name: Save Plan Output
+        if: steps.plan.outcome == 'success' || steps.plan.outcome == 'failure'
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform show -no-color tfplan > plan_output.txt
+
+      - name: Upload Plan Artifact
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 5
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('${{ inputs.working_directory }}/plan_output.txt', 'utf8');
+            
+            // Truncate if too long
+            const maxLength = 60000;
+            const truncatedPlan = planOutput.length > maxLength 
+              ? planOutput.substring(0, maxLength) + '\n\n... (truncated)'
+              : planOutput;
+            
+            const body = `## Terraform Plan Results 🏗️
+            
+            **Environment:** \`${{ inputs.environment }}\`
+            **Workspace:** \`${{ inputs.tf_workspace }}\`
+            **Directory:** \`${{ inputs.working_directory }}\`
+            
+            ### Format Check: ${{ steps.fmt.outcome == 'success' && '✅ Passed' || '⚠️ Failed' }}
+            ### Init: ${{ steps.init.outcome == 'success' && '✅ Passed' || '❌ Failed' }}
+            ### Validate: ${{ steps.validate.outcome == 'success' && '✅ Passed' || '❌ Failed' }}
+            ### Plan: ${{ steps.plan.outcome == 'success' && '✅ Success' || '❌ Failed' }}
+            
+            <details>
+            <summary>Show Plan Output</summary>
+            
+            \`\`\`hcl
+            ${truncatedPlan}
+            \`\`\`
+            
+            </details>
+            
+            ---
+            *Workflow: \`${{ github.workflow }}\` | Run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Plan Status
+        if: steps.plan.outputs.exitcode == '1'
+        run: exit 1
+
+  # ===========================================================================
+  # Terraform Apply
+  # ===========================================================================
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: |
+      inputs.action == 'apply' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    environment: ${{ inputs.require_approval && inputs.environment || '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ inputs.environment }}
+          path: ${{ inputs.working_directory }}
+
+      - name: Terraform Apply
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Tag cluster with TTL metadata
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "")
+          if [[ -n "$CLUSTER_NAME" ]]; then
+            TTL_HOURS="${{ inputs.ttl_hours }}"
+            CREATED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            # Calculate destroy-by time
+            if [[ "$TTL_HOURS" != "0" ]]; then
+              DESTROY_BY=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                           date -u -v+${TTL_HOURS}H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || \
+                           echo "")
+            else
+              DESTROY_BY="never"
+            fi
+            
+            echo "Tagging cluster with TTL metadata..."
+            aws eks tag-resource \
+              --resource-arn $(terraform output -raw cluster_arn) \
+              --tags "TTL_Hours=${TTL_HOURS},CreatedAt=${CREATED_AT},DestroyBy=${DESTROY_BY},CreatedBy=github-actions,RunId=${{ github.run_id }},Environment=${{ inputs.environment }}"
+            
+            echo "### TTL Configuration 🕐" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **TTL:** ${TTL_HOURS} hours" >> $GITHUB_STEP_SUMMARY
+            echo "- **Created At:** ${CREATED_AT}" >> $GITHUB_STEP_SUMMARY
+            if [[ "$DESTROY_BY" != "never" ]]; then
+              echo "- **Auto-destroy By:** ${DESTROY_BY}" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ⚠️ **Cost Protection:** This cluster will be automatically destroyed after ${TTL_HOURS} hours if not manually destroyed first." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- **Auto-destroy:** Disabled (TTL=0)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "> ⚠️ **Warning:** Auto-destroy is disabled. Remember to manually destroy this cluster!" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Output Cluster Info
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          echo "## EKS Cluster Deployed! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cluster Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Name:** $(terraform output -raw cluster_name 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Endpoint:** $(terraform output -raw cluster_endpoint 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** $(terraform output -raw cluster_version 2>/dev/null || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configure kubectl" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "$(terraform output -raw configure_kubectl 2>/dev/null || echo 'aws eks update-kubeconfig --name <cluster-name> --region ap-southeast-2')" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+    outputs:
+      cluster_name: ${{ steps.output.outputs.cluster_name }}
+
+  # ===========================================================================
+  # Terraform Destroy
+  # ===========================================================================
+  terraform-destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    if: inputs.action == 'destroy'
+    environment: ${{ inputs.environment }}-destroy
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: github-actions-terraform-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform plan -destroy -no-color -input=false
+
+      - name: Terraform Destroy
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform destroy -auto-approve -input=false
+
+      - name: Destruction Complete
+        run: |
+          echo "## EKS Cluster Destroyed 🗑️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The ${{ inputs.environment }} EKS cluster has been destroyed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "- **Initiated by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

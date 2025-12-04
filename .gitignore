@@ -53,6 +53,10 @@ terraform.rc
 .env
 .env.local
 
+# Ignore AWS SSO configuration files
+.aws-sso/cache/
+.aws
+
 # Ignore sensitive output files
 *.pem
 *.key
