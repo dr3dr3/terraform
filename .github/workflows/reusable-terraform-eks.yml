@@ -223,11 +223,15 @@ jobs:
           op --version
           op whoami
 
-      - name: Terraform Init
+      - name: Download Plan Artifact
         uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ inputs.environment }}
           path: ${{ inputs.working_directory }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
 
       - name: Terraform Apply
         working-directory: ${{ inputs.working_directory }}
@@ -331,6 +335,10 @@ jobs:
           op whoami
 
       - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan
         working-directory: ${{ inputs.working_directory }}
         run: terraform plan -destroy -no-color -input=false
 
