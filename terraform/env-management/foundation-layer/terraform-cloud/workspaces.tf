@@ -172,11 +172,12 @@ resource "tfe_workspace" "management_foundation_github_dr3dr3" {
 # Note: GITHUB_TOKEN environment variable should be set manually in TFC
 # This token requires repo, admin:repo_hook, and workflow scopes
 
-# Management - Foundation Layer - EKS Cluster Admin
+# Management - Foundation Layer - EKS 1Password Integration
 # ADR-016: Syncs EKS cluster connection details to 1Password
 # ADR-014: CLI-driven, Manual apply
-resource "tfe_workspace" "management_foundation_eks_cluster_admin" {
-  name         = "management-foundation-eks-cluster-admin"
+# ADR-017: Uses local execution mode because 1Password provider requires op CLI
+resource "tfe_workspace" "management_foundation_eks_1password" {
+  name         = "management-foundation-eks-1password"
   organization = data.tfe_organization.main.name
   project_id   = tfe_project.aws_management.id
   description  = "Syncs EKS cluster connection details to 1Password for devcontainer access (ADR-016)"
@@ -184,7 +185,7 @@ resource "tfe_workspace" "management_foundation_eks_cluster_admin" {
   # CLI-driven: No VCS repo - operators explicitly initiate changes
   # vcs_repo block intentionally omitted per ADR-014
 
-  working_directory = "terraform/env-management/foundation-layer/eks-cluster-admin"
+  working_directory = "terraform/env-management/foundation-layer/eks-1password"
   terraform_version = "~> 1.14.0"
   auto_apply        = false # Foundation requires manual approval
 
@@ -199,10 +200,15 @@ resource "tfe_workspace" "management_foundation_eks_cluster_admin" {
   }
 }
 
-# Workspace settings for EKS Cluster Admin
-# Moved from deprecated remote_state_consumer_ids attribute on tfe_workspace
-resource "tfe_workspace_settings" "management_foundation_eks_cluster_admin" {
-  workspace_id = tfe_workspace.management_foundation_eks_cluster_admin.id
+# Workspace settings for EKS 1Password Integration
+# ADR-017: Local execution mode because 1Password provider requires op CLI
+# which isn't available on Terraform Cloud runners
+resource "tfe_workspace_settings" "management_foundation_eks_1password" {
+  workspace_id = tfe_workspace.management_foundation_eks_1password.id
+
+  # Local execution mode: Terraform runs locally where op CLI is available
+  # State is still stored in Terraform Cloud
+  execution_mode = "local"
 
   # Allow reading outputs from other workspaces (empty = global remote state sharing disabled)
   remote_state_consumer_ids = []
