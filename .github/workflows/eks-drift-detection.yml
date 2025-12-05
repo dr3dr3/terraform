@@ -18,6 +18,8 @@
 
 name: "EKS Drift Detection"
 
+run-name: "🔍 EKS Drift Detection - ${{ github.event_name == 'schedule' && 'Weekly Check' || 'On-Demand' }} [${{ github.run_id }}]"
+
 on:
   # Weekly schedule - Monday at 06:00 UTC
   schedule:
