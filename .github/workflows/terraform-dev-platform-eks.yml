@@ -123,6 +123,7 @@ jobs:
     with:
       fail_on_drift: false  # Don't fail PR, just report
       reference_environment: development
+    secrets: inherit
 
   # ===========================================================================
   # Sync 1Password (Per ADR-017: Lifecycle Coordination)
