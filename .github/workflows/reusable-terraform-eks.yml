@@ -91,12 +91,15 @@ jobs:
         uses: 1password/install-cli-action@v1
 
       - name: Verify 1Password CLI
-        if: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN != '' }}
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: |
           op --version
-          op whoami
+          if [[ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]]; then
+            op whoami
+          else
+            echo "1Password token not provided, skipping verification"
+          fi
 
       - name: Terraform Format Check
         id: fmt
@@ -216,12 +219,15 @@ jobs:
         uses: 1password/install-cli-action@v1
 
       - name: Verify 1Password CLI
-        if: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN != '' }}
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: |
           op --version
-          op whoami
+          if [[ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]]; then
+            op whoami
+          else
+            echo "1Password token not provided, skipping verification"
+          fi
 
       - name: Download Plan Artifact
         uses: actions/download-artifact@v4
@@ -327,12 +333,15 @@ jobs:
         uses: 1password/install-cli-action@v1
 
       - name: Verify 1Password CLI
-        if: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN != '' }}
         env:
           OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
         run: |
           op --version
-          op whoami
+          if [[ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]]; then
+            op whoami
+          else
+            echo "1Password token not provided, skipping verification"
+          fi
 
       - name: Terraform Init
         working-directory: ${{ inputs.working_directory }}
