@@ -114,6 +114,17 @@ jobs:
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
 
   # ===========================================================================
+  # Drift Detection (PR only - Per ADR-020)
+  # ===========================================================================
+  drift-detection:
+    name: "Drift Detection"
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/eks-drift-detection.yml
+    with:
+      fail_on_drift: false  # Don't fail PR, just report
+      reference_environment: development
+
+  # ===========================================================================
   # Sync 1Password (Per ADR-017: Lifecycle Coordination)
   # ===========================================================================
   sync-1password:

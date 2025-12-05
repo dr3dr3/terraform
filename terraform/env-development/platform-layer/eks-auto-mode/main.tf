@@ -29,9 +29,9 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Environment = "Development"
+      Environment = var.environment_tag
       ManagedBy   = "Terraform"
-      Layer       = "platform"
+      Layer       = "Platform"
       Owner       = var.owner
       Project     = "eks-auto-mode"
     }

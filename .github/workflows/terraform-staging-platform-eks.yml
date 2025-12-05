@@ -41,7 +41,7 @@ on:
       ttl_hours:
         description: "Time-to-live in hours (0 = no auto-destroy)"
         required: false
-        default: "24"
+        default: "48"
         type: string
 
 # Ensure only one workflow runs at a time for this environment
@@ -70,7 +70,7 @@ jobs:
         id: set-action
         run: |
           ACTION="plan"
-          TTL_HOURS="24"  # Staging default: 24 hours
+          TTL_HOURS="48"  # Staging default: 48 hours
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             ACTION="${{ github.event.inputs.action }}"
@@ -106,6 +106,17 @@ jobs:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_STAGING_PLATFORM }}
       TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
       OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+
+  # ===========================================================================
+  # Drift Detection (PR only - Per ADR-020)
+  # ===========================================================================
+  drift-detection:
+    name: "Drift Detection"
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/eks-drift-detection.yml
+    with:
+      fail_on_drift: false  # Don't fail PR, just report
+      reference_environment: development
 
   # ===========================================================================
   # Sync 1Password (Per ADR-017: Lifecycle Coordination)
