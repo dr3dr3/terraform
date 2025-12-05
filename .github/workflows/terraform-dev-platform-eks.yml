@@ -17,6 +17,8 @@
 
 name: "Terraform: Dev Platform EKS"
 
+run-name: "🚀 Dev EKS - ${{ github.event_name == 'push' && '✨ Auto-Apply' || github.event_name == 'pull_request' && '📋 Plan' || '🙋 Manual' }} [${{ github.run_id }}]"
+
 on:
   push:
     branches:

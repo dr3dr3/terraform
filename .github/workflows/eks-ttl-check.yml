@@ -24,6 +24,8 @@
 
 name: "EKS: TTL Check & Auto-Destroy"
 
+run-name: "⏱️ EKS TTL Check - ${{ github.event_name == 'schedule' && 'Daily' || 'Manual' }} [${{ github.run_id }}]"
+
 on:
   schedule:
     # Run daily at 10pm AEST (12:00 UTC)

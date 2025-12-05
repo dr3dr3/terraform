@@ -11,6 +11,8 @@
 
 name: "Reusable: Terraform EKS"
 
+run-name: "🏗️ Terraform ${{ inputs.action }} - ${{ inputs.environment }} [${{ github.run_id }}]"
+
 on:
   workflow_call:
     inputs:

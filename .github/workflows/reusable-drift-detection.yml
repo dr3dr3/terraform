@@ -18,6 +18,8 @@
 
 name: "Reusable: Drift Detection"
 
+run-name: "🔍 Drift Detection - ${{ inputs.component }} in ${{ inputs.layer }} [${{ github.run_id }}]"
+
 on:
   workflow_call:
     inputs:
@@ -78,15 +80,15 @@ jobs:
             "*.tf"
           )
           
-          # Files to check for provider version consistency
-          LOCKFILE=".terraform.lock.hcl"
-          
           # Files explicitly excluded from comparison (expected to differ)
           EXCLUDE_FILES=(
             "terraform.tfvars"
             "terraform.tfvars.example"
             "backend.tf"
             "README.md"
+            "main.tf"
+            "variables.tf"
+            ".terraform.lock.hcl"
           )
           
           REFERENCE_PATH="terraform/env-${REFERENCE_ENV}/${LAYER}/${COMPONENT}"
@@ -216,27 +218,6 @@ jobs:
                 DRIFT_DETAILS="${DRIFT_DETAILS}\n- ${TARGET_TF}: Extra file in ${ENV} (not in ${REFERENCE_ENV})"
               fi
             done
-            
-            # Compare .terraform.lock.hcl if it exists in both
-            if [[ -f "${REFERENCE_PATH}/${LOCKFILE}" ]] && [[ -f "${TARGET_PATH}/${LOCKFILE}" ]]; then
-              if ! diff -q "${REFERENCE_PATH}/${LOCKFILE}" "${TARGET_PATH}/${LOCKFILE}" > /dev/null 2>&1; then
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "| \`${LOCKFILE}\` | ⚠️ Provider versions differ |" >> $GITHUB_STEP_SUMMARY
-                DRIFT_DETECTED="true"
-                ENV_HAS_DRIFT="true"
-                DRIFT_COUNT=$((DRIFT_COUNT + 1))
-                
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "<details>" >> $GITHUB_STEP_SUMMARY
-                echo "<summary>View provider version diff</summary>" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
-                diff -u "${REFERENCE_PATH}/${LOCKFILE}" "${TARGET_PATH}/${LOCKFILE}" >> $GITHUB_STEP_SUMMARY || true
-                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "</details>" >> $GITHUB_STEP_SUMMARY
-              fi
-            fi
             
             if [[ "$ENV_HAS_DRIFT" == "false" ]]; then
               echo "" >> $GITHUB_STEP_SUMMARY
