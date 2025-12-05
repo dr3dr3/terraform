@@ -230,10 +230,13 @@ jobs:
               DESTROY_BY="never"
             fi
             
+            # Capitalize environment for tagging policy compliance
+            ENV_CAPITALIZED="$(echo '${{ inputs.environment }}' | sed 's/^\(.\)/\U\1/')"
+            
             echo "Tagging cluster with TTL metadata..."
             aws eks tag-resource \
               --resource-arn $(terraform output -raw cluster_arn) \
-              --tags "TTL_Hours=${TTL_HOURS},CreatedAt=${CREATED_AT},DestroyBy=${DESTROY_BY},CreatedBy=github-actions,RunId=${{ github.run_id }},Environment=${{ inputs.environment }}"
+              --tags "TTL_Hours=${TTL_HOURS},CreatedAt=${CREATED_AT},DestroyBy=${DESTROY_BY},CreatedBy=github-actions,RunId=${{ github.run_id }},Environment=${ENV_CAPITALIZED}"
             
             echo "### TTL Configuration 🕐" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY

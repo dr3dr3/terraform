@@ -1,0 +1,188 @@
+# =============================================================================
+# GitHub Actions Workflow: EKS Drift Detection (Scheduled)
+# =============================================================================
+# Per ADR-020: Runs weekly to detect unintended drift between EKS Auto Mode
+# configurations across development, staging, and production environments.
+#
+# Schedule: Every Monday at 06:00 UTC
+#
+# What is checked:
+#   - All .tf files should be identical across environments
+#   - Provider lock files should have consistent versions
+#
+# What is NOT checked (expected to differ):
+#   - terraform.tfvars (environment-specific values)
+#   - backend.tf (environment-specific state config)
+#   - README.md (environment-specific documentation)
+# =============================================================================
+
+name: "EKS Drift Detection"
+
+on:
+  # Weekly schedule - Monday at 06:00 UTC
+  schedule:
+    - cron: "0 6 * * 1"
+
+  # Allow manual trigger for on-demand drift checks
+  workflow_dispatch:
+    inputs:
+      fail_on_drift:
+        description: "Fail workflow if drift is detected"
+        required: false
+        default: true
+        type: boolean
+      reference_environment:
+        description: "Environment to use as reference"
+        required: false
+        default: "development"
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+
+  # Can also be triggered from EKS workflows on pull requests
+  workflow_call:
+    inputs:
+      fail_on_drift:
+        description: "Fail workflow if drift is detected"
+        required: false
+        type: boolean
+        default: false
+      reference_environment:
+        description: "Environment to use as reference"
+        required: false
+        type: string
+        default: "development"
+    outputs:
+      drift_detected:
+        description: "Whether drift was detected"
+        value: ${{ jobs.eks-drift-check.outputs.drift_detected }}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  # ===========================================================================
+  # EKS Auto Mode Drift Detection
+  # ===========================================================================
+  eks-drift-check:
+    name: "EKS Auto Mode"
+    uses: ./.github/workflows/reusable-drift-detection.yml
+    with:
+      component: eks-auto-mode
+      layer: platform-layer
+      environments: '["development", "staging", "production"]'
+      reference_environment: ${{ inputs.reference_environment || 'development' }}
+      fail_on_drift: ${{ inputs.fail_on_drift == '' && true || inputs.fail_on_drift }}
+    outputs:
+      drift_detected: ${{ jobs.detect-drift.outputs.drift_detected }}
+
+  # ===========================================================================
+  # Create Issue on Drift Detection (Scheduled runs only)
+  # ===========================================================================
+  create-drift-issue:
+    name: "Create Issue"
+    runs-on: ubuntu-latest
+    needs: eks-drift-check
+    if: |
+      always() &&
+      github.event_name == 'schedule' &&
+      needs.eks-drift-check.outputs.drift_detected == 'true'
+
+    steps:
+      - name: Create drift detection issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const title = '🔍 EKS Configuration Drift Detected';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            
+            const body = `## EKS Configuration Drift Detected
+            
+            The weekly drift detection workflow found differences in EKS Auto Mode Terraform configurations across environments.
+            
+            ### Details
+            
+            - **Workflow Run:** [View Results](${runUrl})
+            - **Detected:** ${new Date().toISOString()}
+            - **Component:** \`eks-auto-mode\`
+            - **Layer:** \`platform-layer\`
+            
+            ### What This Means
+            
+            Per [ADR-020](docs/reference/architecture-decision-register/ADR-020-eks-per-environment-code-structure.md), \`.tf\` files should be identical across all environments (development, staging, production). Only \`terraform.tfvars\` should contain environment-specific values.
+            
+            ### Remediation Steps
+            
+            1. Review the [workflow run](${runUrl}) to identify which files differ
+            2. Determine which environment has the correct/latest version
+            3. Copy the correct \`.tf\` files to all environments
+            4. Submit a PR with the sync changes
+            5. Ensure PR review verifies file consistency
+            
+            ### Affected Paths
+            
+            - \`terraform/env-development/platform-layer/eks-auto-mode/\`
+            - \`terraform/env-staging/platform-layer/eks-auto-mode/\`
+            - \`terraform/env-production/platform-layer/eks-auto-mode/\`
+            
+            ---
+            
+            *This issue was automatically created by the EKS Drift Detection workflow.*
+            `;
+            
+            // Check for existing open drift issues to avoid duplicates
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'drift-detection,eks',
+              per_page: 1
+            });
+            
+            if (existingIssues.data.length > 0) {
+              // Comment on existing issue instead of creating a new one
+              const existingIssue = existingIssues.data[0];
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `### Drift Still Detected - ${new Date().toISOString()}\n\nThe weekly drift detection found that drift is still present.\n\n**Workflow Run:** [View Results](${runUrl})`
+              });
+              console.log(`Commented on existing issue #${existingIssue.number}`);
+            } else {
+              // Create new issue
+              const issue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['drift-detection', 'eks', 'terraform', 'automated']
+              });
+              console.log(`Created issue #${issue.data.number}`);
+            }
+
+  # ===========================================================================
+  # Notify on Success (Scheduled runs only)
+  # ===========================================================================
+  notify-success:
+    name: "Notify Success"
+    runs-on: ubuntu-latest
+    needs: eks-drift-check
+    if: |
+      always() &&
+      github.event_name == 'schedule' &&
+      needs.eks-drift-check.outputs.drift_detected == 'false'
+
+    steps:
+      - name: Log success
+        run: |
+          echo "## ✅ No Drift Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Weekly drift detection completed successfully." >> $GITHUB_STEP_SUMMARY
+          echo "All EKS Auto Mode \`.tf\` files are consistent across environments." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Checked:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY

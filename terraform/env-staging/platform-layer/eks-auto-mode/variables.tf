@@ -20,6 +20,12 @@ variable "environment" {
   default     = "stg"
 }
 
+variable "environment_tag" {
+  description = "Environment tag value for AWS resources (e.g., Development, Staging, Production)"
+  type        = string
+  default     = "Staging"
+}
+
 variable "owner" {
   description = "Owner tag for resources"
   type        = string

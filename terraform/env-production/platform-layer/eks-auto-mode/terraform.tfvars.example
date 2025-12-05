@@ -1,0 +1,80 @@
+# =============================================================================
+# Example Terraform Variables - Production
+# =============================================================================
+# Copy this file to terraform.tfvars and customize values
+# Variables marked with [DECISION REQUIRED] need your review
+# PRODUCTION CONFIGURATION - Review all settings carefully
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General Configuration
+# -----------------------------------------------------------------------------
+aws_region  = "ap-southeast-2"
+environment = "prod"
+owner       = "Platform-Team"
+
+# -----------------------------------------------------------------------------
+# VPC Configuration [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# Ensure this CIDR doesn't overlap with other VPCs you may peer with
+# Using 10.2.0.0/16 for production (10.0.0.0/16 is dev, 10.1.0.0/16 is staging)
+vpc_cidr = "10.2.0.0/16"
+
+# Number of AZs: 3 for maximum availability in production
+# Cost: Additional ~$32/month per AZ for NAT Gateway
+az_count = 3
+
+# HA NAT Gateway: false means one per AZ for high availability
+# Cost: ~$96/month for 3 NAT Gateways (production requirement)
+single_nat_gateway = false
+
+# -----------------------------------------------------------------------------
+# EKS Configuration
+# -----------------------------------------------------------------------------
+cluster_name       = "eks-auto"
+kubernetes_version = "1.31"
+
+# -----------------------------------------------------------------------------
+# Cluster Access [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# Production security consideration: Consider setting to false and using
+# private access only with VPN/bastion for maximum security
+cluster_endpoint_public_access  = true
+cluster_endpoint_private_access = true
+
+# IMPORTANT: Restrict public access to specific CIDRs for production
+# Example: ["203.0.113.0/24", "198.51.100.0/24"]
+# TODO: Update with your corporate IP ranges
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+# -----------------------------------------------------------------------------
+# Logging [DECISION REQUIRED]
+# -----------------------------------------------------------------------------
+# All log types enabled for full audit trail in production
+cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+# 90 days retention for production compliance
+# Adjust based on your compliance requirements (may need 365+ days)
+cloudwatch_log_retention_days = 90
+
+# -----------------------------------------------------------------------------
+# Security
+# -----------------------------------------------------------------------------
+# Always enabled for production
+enable_secrets_encryption = true
+
+# -----------------------------------------------------------------------------
+# EKS Auto Mode
+# -----------------------------------------------------------------------------
+auto_mode_enabled    = true
+auto_mode_node_pools = ["general-purpose", "system"]
+
+# -----------------------------------------------------------------------------
+# Access Management
+# -----------------------------------------------------------------------------
+# Consider disabling after initial setup for production
+enable_cluster_creator_admin_permissions = true
+
+# Add production admin roles by ARN
+# Example: ["arn:aws:iam::123456789012:role/ProdAdminRole"]
+additional_cluster_admins = []

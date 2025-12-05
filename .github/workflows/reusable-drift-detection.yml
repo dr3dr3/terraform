@@ -1,0 +1,278 @@
+# =============================================================================
+# GitHub Actions Workflow: Reusable Drift Detection
+# =============================================================================
+# Per ADR-020: Per-environment folders should have identical .tf files with
+# differences isolated to terraform.tfvars. This workflow detects unintended
+# drift between environments.
+#
+# What is checked:
+#   - .tf files (should be identical across environments)
+#   - .terraform.lock.hcl (provider versions should match)
+#
+# What is NOT checked (expected to differ):
+#   - terraform.tfvars (environment-specific values)
+#   - backend.tf (environment-specific state config)
+#   - README.md (environment-specific documentation)
+#   - .terraform/ directory (local state)
+# =============================================================================
+
+name: "Reusable: Drift Detection"
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        description: "Component to check for drift (e.g., eks-auto-mode)"
+        required: true
+        type: string
+      layer:
+        description: "Infrastructure layer (e.g., platform-layer, foundation-layer)"
+        required: true
+        type: string
+      environments:
+        description: "JSON array of environments to compare (e.g., '[\"development\", \"staging\", \"production\"]')"
+        required: true
+        type: string
+      reference_environment:
+        description: "Environment to use as reference for comparison"
+        required: false
+        type: string
+        default: "development"
+      fail_on_drift:
+        description: "Whether to fail the workflow if drift is detected"
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      drift_detected:
+        description: "Whether drift was detected"
+        value: ${{ jobs.detect-drift.outputs.drift_detected }}
+      drift_summary:
+        description: "Summary of detected drift"
+        value: ${{ jobs.detect-drift.outputs.drift_summary }}
+
+jobs:
+  detect-drift:
+    name: "Detect Drift"
+    runs-on: ubuntu-latest
+    outputs:
+      drift_detected: ${{ steps.check-drift.outputs.drift_detected }}
+      drift_summary: ${{ steps.check-drift.outputs.drift_summary }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for drift between environments
+        id: check-drift
+        run: |
+          set -euo pipefail
+          
+          COMPONENT="${{ inputs.component }}"
+          LAYER="${{ inputs.layer }}"
+          REFERENCE_ENV="${{ inputs.reference_environment }}"
+          ENVIRONMENTS='${{ inputs.environments }}'
+          
+          # Files to compare (should be identical across environments)
+          COMPARE_FILES=(
+            "*.tf"
+          )
+          
+          # Files to check for provider version consistency
+          LOCKFILE=".terraform.lock.hcl"
+          
+          # Files explicitly excluded from comparison (expected to differ)
+          EXCLUDE_FILES=(
+            "terraform.tfvars"
+            "terraform.tfvars.example"
+            "backend.tf"
+            "README.md"
+          )
+          
+          REFERENCE_PATH="terraform/env-${REFERENCE_ENV}/${LAYER}/${COMPONENT}"
+          
+          echo "## 🔍 Drift Detection Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Component:** \`${COMPONENT}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Layer:** \`${LAYER}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Reference Environment:** \`${REFERENCE_ENV}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Checked at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Verify reference path exists
+          if [[ ! -d "$REFERENCE_PATH" ]]; then
+            echo "❌ Reference path does not exist: $REFERENCE_PATH" >> $GITHUB_STEP_SUMMARY
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            echo "drift_summary=Reference path not found" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          DRIFT_DETECTED="false"
+          DRIFT_DETAILS=""
+          DRIFT_COUNT=0
+          
+          # Parse environments from JSON array
+          ENVS=$(echo "$ENVIRONMENTS" | jq -r '.[]')
+          
+          echo "### Files Compared" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| File | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # List all .tf files in reference directory
+          TF_FILES=$(find "$REFERENCE_PATH" -maxdepth 1 -name "*.tf" -type f -printf "%f\n" | sort)
+          
+          for ENV in $ENVS; do
+            # Skip if comparing reference to itself
+            if [[ "$ENV" == "$REFERENCE_ENV" ]]; then
+              continue
+            fi
+            
+            TARGET_PATH="terraform/env-${ENV}/${LAYER}/${COMPONENT}"
+            
+            # Check if target path exists
+            if [[ ! -d "$TARGET_PATH" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ⚠️ Environment \`${ENV}\` - Path Not Found" >> $GITHUB_STEP_SUMMARY
+              echo "Path \`${TARGET_PATH}\` does not exist." >> $GITHUB_STEP_SUMMARY
+              DRIFT_DETECTED="true"
+              DRIFT_COUNT=$((DRIFT_COUNT + 1))
+              continue
+            fi
+            
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Comparing \`${REFERENCE_ENV}\` → \`${ENV}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            ENV_HAS_DRIFT="false"
+            
+            # Compare each .tf file
+            for TF_FILE in $TF_FILES; do
+              # Skip excluded files
+              SKIP="false"
+              for EXCLUDE in "${EXCLUDE_FILES[@]}"; do
+                if [[ "$TF_FILE" == "$EXCLUDE" ]]; then
+                  SKIP="true"
+                  break
+                fi
+              done
+              
+              if [[ "$SKIP" == "true" ]]; then
+                continue
+              fi
+              
+              REFERENCE_FILE="${REFERENCE_PATH}/${TF_FILE}"
+              TARGET_FILE="${TARGET_PATH}/${TF_FILE}"
+              
+              if [[ ! -f "$TARGET_FILE" ]]; then
+                echo "| \`${TF_FILE}\` | ❌ Missing in ${ENV} |" >> $GITHUB_STEP_SUMMARY
+                DRIFT_DETECTED="true"
+                ENV_HAS_DRIFT="true"
+                DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                DRIFT_DETAILS="${DRIFT_DETAILS}\n- ${TF_FILE}: Missing in ${ENV}"
+              elif ! diff -q "$REFERENCE_FILE" "$TARGET_FILE" > /dev/null 2>&1; then
+                echo "| \`${TF_FILE}\` | ⚠️ Differs in ${ENV} |" >> $GITHUB_STEP_SUMMARY
+                DRIFT_DETECTED="true"
+                ENV_HAS_DRIFT="true"
+                DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                DRIFT_DETAILS="${DRIFT_DETAILS}\n- ${TF_FILE}: Differs between ${REFERENCE_ENV} and ${ENV}"
+                
+                # Show diff details in collapsible section
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "<details>" >> $GITHUB_STEP_SUMMARY
+                echo "<summary>View diff for <code>${TF_FILE}</code></summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
+                diff -u "$REFERENCE_FILE" "$TARGET_FILE" >> $GITHUB_STEP_SUMMARY || true
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| \`${TF_FILE}\` | ✅ Identical |" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+            
+            # Check for extra .tf files in target that don't exist in reference
+            TARGET_TF_FILES=$(find "$TARGET_PATH" -maxdepth 1 -name "*.tf" -type f -printf "%f\n" | sort)
+            for TARGET_TF in $TARGET_TF_FILES; do
+              # Skip excluded files
+              SKIP="false"
+              for EXCLUDE in "${EXCLUDE_FILES[@]}"; do
+                if [[ "$TARGET_TF" == "$EXCLUDE" ]]; then
+                  SKIP="true"
+                  break
+                fi
+              done
+              
+              if [[ "$SKIP" == "true" ]]; then
+                continue
+              fi
+              
+              if [[ ! -f "${REFERENCE_PATH}/${TARGET_TF}" ]]; then
+                echo "| \`${TARGET_TF}\` | ⚠️ Extra file in ${ENV} |" >> $GITHUB_STEP_SUMMARY
+                DRIFT_DETECTED="true"
+                ENV_HAS_DRIFT="true"
+                DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                DRIFT_DETAILS="${DRIFT_DETAILS}\n- ${TARGET_TF}: Extra file in ${ENV} (not in ${REFERENCE_ENV})"
+              fi
+            done
+            
+            # Compare .terraform.lock.hcl if it exists in both
+            if [[ -f "${REFERENCE_PATH}/${LOCKFILE}" ]] && [[ -f "${TARGET_PATH}/${LOCKFILE}" ]]; then
+              if ! diff -q "${REFERENCE_PATH}/${LOCKFILE}" "${TARGET_PATH}/${LOCKFILE}" > /dev/null 2>&1; then
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "| \`${LOCKFILE}\` | ⚠️ Provider versions differ |" >> $GITHUB_STEP_SUMMARY
+                DRIFT_DETECTED="true"
+                ENV_HAS_DRIFT="true"
+                DRIFT_COUNT=$((DRIFT_COUNT + 1))
+                
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "<details>" >> $GITHUB_STEP_SUMMARY
+                echo "<summary>View provider version diff</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
+                diff -u "${REFERENCE_PATH}/${LOCKFILE}" "${TARGET_PATH}/${LOCKFILE}" >> $GITHUB_STEP_SUMMARY || true
+                echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+            
+            if [[ "$ENV_HAS_DRIFT" == "false" ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "✅ No drift detected between \`${REFERENCE_ENV}\` and \`${ENV}\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "$DRIFT_DETECTED" == "true" ]]; then
+            echo "### ⚠️ Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Total differences found:** ${DRIFT_COUNT}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Per [ADR-020](../../docs/reference/architecture-decision-register/ADR-020-eks-per-environment-code-structure.md), \`.tf\` files should be identical across environments." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Remediation:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Identify which environment has the correct version" >> $GITHUB_STEP_SUMMARY
+            echo "2. Copy the correct \`.tf\` files to all environments" >> $GITHUB_STEP_SUMMARY
+            echo "3. Submit a PR with changes to sync all environments" >> $GITHUB_STEP_SUMMARY
+            
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            echo "drift_summary=Found ${DRIFT_COUNT} differences across environments" >> $GITHUB_OUTPUT
+          else
+            echo "### ✅ No Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All \`.tf\` files are identical across environments." >> $GITHUB_STEP_SUMMARY
+            
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "drift_summary=No drift detected" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fail if drift detected and fail_on_drift is true
+        if: steps.check-drift.outputs.drift_detected == 'true' && inputs.fail_on_drift
+        run: |
+          echo "❌ Drift detected and fail_on_drift is enabled"
+          exit 1

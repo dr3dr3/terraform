@@ -18,7 +18,7 @@
 #
 # Supported Environments:
 # - Development: TTL auto-destroy enabled (default 8h)
-# - Staging: TTL auto-destroy enabled (default 24h)
+# - Staging: TTL auto-destroy enabled (default 48h)
 # - Production: TTL disabled by default (persistent clusters)
 # =============================================================================
 
