@@ -57,7 +57,7 @@ on:
     outputs:
       drift_detected:
         description: "Whether drift was detected"
-        value: ${{ jobs.eks-drift-check.outputs.drift_detected }}
+        value: ${{ jobs.report-drift.outputs.drift_detected }}
 
 permissions:
   contents: read
@@ -78,16 +78,31 @@ jobs:
       fail_on_drift: ${{ inputs.fail_on_drift == '' && true || inputs.fail_on_drift }}
 
   # ===========================================================================
+  # Report Drift Output (Bridge job for workflow_call outputs)
+  # ===========================================================================
+  report-drift:
+    name: "Report Drift"
+    runs-on: ubuntu-latest
+    needs: eks-drift-check
+    outputs:
+      drift_detected: ${{ steps.set-output.outputs.drift_detected }}
+    steps:
+      - name: Set output from reusable workflow
+        id: set-output
+        run: |
+          echo "drift_detected=${{ needs.eks-drift-check.outputs.drift_detected }}" >> $GITHUB_OUTPUT
+
+  # ===========================================================================
   # Create Issue on Drift Detection (Scheduled runs only)
   # ===========================================================================
   create-drift-issue:
     name: "Create Issue"
     runs-on: ubuntu-latest
-    needs: eks-drift-check
+    needs: report-drift
     if: |
       always() &&
       github.event_name == 'schedule' &&
-      needs.eks-drift-check.outputs.drift_detected == 'true'
+      needs.report-drift.outputs.drift_detected == 'true'
 
     steps:
       - name: Create drift detection issue
@@ -169,11 +184,11 @@ jobs:
   notify-success:
     name: "Notify Success"
     runs-on: ubuntu-latest
-    needs: eks-drift-check
+    needs: report-drift
     if: |
       always() &&
       github.event_name == 'schedule' &&
-      needs.eks-drift-check.outputs.drift_detected == 'false'
+      needs.report-drift.outputs.drift_detected == 'false'
 
     steps:
       - name: Log success
