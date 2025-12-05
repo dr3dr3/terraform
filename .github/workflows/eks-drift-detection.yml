@@ -76,8 +76,6 @@ jobs:
       environments: '["development", "staging", "production"]'
       reference_environment: ${{ inputs.reference_environment || 'development' }}
       fail_on_drift: ${{ inputs.fail_on_drift == '' && true || inputs.fail_on_drift }}
-    outputs:
-      drift_detected: ${{ jobs.detect-drift.outputs.drift_detected }}
 
   # ===========================================================================
   # Create Issue on Drift Detection (Scheduled runs only)
