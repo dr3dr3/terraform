@@ -25,7 +25,39 @@
 # - Platform Engineers: Full Kubernetes access (no IAM)
 # - Developers: Edit access to dev and default namespaces
 #
+# NOTE: EKS Access Entries require exact role ARNs (wildcards not supported).
+#       We use data sources to dynamically fetch the SSO role ARNs.
+#
 # ==============================================================================
+
+# -----------------------------------------------------------------------------
+# Data Sources - Fetch SSO Role ARNs
+# -----------------------------------------------------------------------------
+# AWS SSO creates roles with random suffixes (e.g., _f2797e9b77c9c51a)
+# We need to fetch the exact ARN for each role using data sources
+
+data "aws_iam_roles" "sso_roles" {
+  name_regex  = "AWSReservedSSO_.*"
+  path_prefix = "/aws-reserved/sso.amazonaws.com/"
+}
+
+locals {
+  # Extract exact role ARNs by matching role name patterns
+  admin_role_arn = [
+    for arn in data.aws_iam_roles.sso_roles.arns :
+    arn if length(regexall("AWSReservedSSO_AdministratorAccess_", arn)) > 0
+  ][0]
+
+  platform_engineer_role_arn = [
+    for arn in data.aws_iam_roles.sso_roles.arns :
+    arn if length(regexall("AWSReservedSSO_PlatformEngineerAccess_", arn)) > 0
+  ][0]
+
+  developer_role_arn = [
+    for arn in data.aws_iam_roles.sso_roles.arns :
+    arn if length(regexall("AWSReservedSSO_DeveloperAccess_", arn)) > 0
+  ][0]
+}
 
 # -----------------------------------------------------------------------------
 # Administrator Access Entry
@@ -38,7 +70,7 @@
 
 resource "aws_eks_access_entry" "sso_admins" {
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = "arn:${local.partition}:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/ap-southeast-2/AWSReservedSSO_AdministratorAccess_*"
+  principal_arn = local.admin_role_arn
   type          = "STANDARD"
 
   tags = merge(local.common_tags, {
@@ -71,7 +103,7 @@ resource "aws_eks_access_policy_association" "sso_admins" {
 
 resource "aws_eks_access_entry" "sso_platform_engineers" {
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = "arn:${local.partition}:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/ap-southeast-2/AWSReservedSSO_PlatformEngineerAccess_*"
+  principal_arn = local.platform_engineer_role_arn
   type          = "STANDARD"
 
   tags = merge(local.common_tags, {
@@ -104,7 +136,7 @@ resource "aws_eks_access_policy_association" "sso_platform_engineers" {
 
 resource "aws_eks_access_entry" "sso_developers" {
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = "arn:${local.partition}:iam::${local.account_id}:role/aws-reserved/sso.amazonaws.com/ap-southeast-2/AWSReservedSSO_DeveloperAccess_*"
+  principal_arn = local.developer_role_arn
   type          = "STANDARD"
 
   tags = merge(local.common_tags, {
@@ -133,8 +165,8 @@ resource "aws_eks_access_policy_association" "sso_developers" {
 output "access_entry_principals" {
   description = "IAM principals granted access to the EKS cluster"
   value = {
-    administrators     = aws_eks_access_entry.sso_admins.principal_arn
-    platform_engineers = aws_eks_access_entry.sso_platform_engineers.principal_arn
-    developers         = aws_eks_access_entry.sso_developers.principal_arn
+    administrators     = local.admin_role_arn
+    platform_engineers = local.platform_engineer_role_arn
+    developers         = local.developer_role_arn
   }
 }
