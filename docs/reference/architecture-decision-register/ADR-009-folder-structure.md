@@ -6,7 +6,7 @@ Approved
 
 ## Date
 
-2025-11-02
+2025-11-02 (Updated: 2025-12-08)
 
 ## Context
 
@@ -37,44 +37,46 @@ We will adopt **Environments → Layers → Stacks** as our Terraform folder str
 terraform/
 ├── env-local/                    # Local development with LocalStack
 │   ├── foundation-layer/
-│   │   └── README.md
 │   ├── platform-layer/
-│   │   └── README.md
 │   ├── applications-layer/
-│   │   ├── README.md
-│   │   └── eks-learning-cluster/
-│   └── sandbox-layer/            # Experimental and learning resources
+│   │   └── eks-learning-cluster/ # Learning/tutorial resources
+│   └── sandbox-layer/
 │       └── localhost-learning/
 ├── env-development/              # AWS development environment
 │   ├── foundation-layer/
-│   │   └── iam-roles-terraform/
-│   │       ├── main.tf
-│   │       ├── variables.tf
-│   │       ├── outputs.tf
-│   │       └── terraform.tfvars
-│   └── applications-layer/
-│       └── eks-learning-cluster/
-│           ├── main7.tf
-│           ├── outputs.tf
-│           ├── README.md
-│           ├── START-HERE.md
-│           ├── SUMMARY.md
-│           └── QUICK-REFERENCE.md
+│   │   ├── gha-oidc/
+│   │   └── iam-roles-for-terraform/
+│   └── platform-layer/
+│       └── eks-auto-mode/        # EKS cluster in platform layer
+├── env-staging/                  # AWS staging environment
+│   ├── foundation-layer/
+│   │   ├── gha-oidc/
+│   │   └── iam-roles-for-terraform/
+│   └── platform-layer/
+│       └── eks-auto-mode/
+├── env-production/               # AWS production environment
+│   ├── foundation-layer/
+│   │   ├── gha-oidc/
+│   │   └── iam-roles-for-terraform/
+│   └── platform-layer/
+│       └── eks-auto-mode/
+├── env-sandbox/                  # AWS sandbox environment
+│   ├── foundation-layer/
+│   ├── platform-layer/
+│   ├── applications-layer/
+│   └── sandbox-layer/
 ├── env-management/               # AWS management/control plane
 │   └── foundation-layer/
+│       ├── eks-1password/
+│       ├── eks-cluster-admin/
+│       ├── gha-oidc/
+│       ├── github-dr3dr3/
 │       ├── iam-roles-for-people/
-│       └── iam-roles-for-terraform/
+│       ├── terraform-cloud/
+│       └── tfc-oidc-role/
 └── terraform-modules/            # Reusable infrastructure modules
     ├── permission-set/
-    │   ├── main.tf
-    │   ├── outputs.tf
-    │   ├── variables.tf
-    │   └── examples/
     └── terraform-oidc-role/
-        ├── main.tf
-        ├── outputs.tf
-        ├── policies.tf
-        └── variables.tf
 ```
 
 ## Rationale
@@ -84,12 +86,104 @@ terraform/
 Our implementation includes these specialized environment types:
 
 - **`env-local/`**: LocalStack-based local development environment for rapid iteration without AWS costs
-- **`env-management/`**: AWS control plane for IAM Identity Center, organizational IAM roles, and cross-account resources
+- **`env-management/`**: AWS control plane for IAM Identity Center, organizational IAM roles, Terraform Cloud configuration, and cross-account resources
+- **`env-sandbox/`**: AWS sandbox environment for experimentation and proof-of-concepts
 - **`env-development/`**: AWS development workload environment for testing real cloud resources
-- **`env-staging/`** (future): AWS staging environment for pre-production validation
-- **`env-production/`** (future): AWS production environment for live workloads
+- **`env-staging/`**: AWS staging environment for pre-production validation
+- **`env-production/`**: AWS production environment for live workloads
 
-The `env-local` environment includes a unique `sandbox-layer/` for experimental and learning resources that don't fit traditional infrastructure layers.
+The `env-local` and `env-sandbox` environments include a `sandbox-layer/` for experimental and learning resources that don't fit traditional infrastructure layers.
+
+### Layer Definitions and Contents
+
+Each layer has a specific purpose and contains particular types of infrastructure:
+
+#### Foundation Layer (`foundation-layer/`)
+
+**Purpose**: Core AWS infrastructure that rarely changes and has no dependencies on other layers.
+
+**Contains**:
+
+- IAM roles and policies (for Terraform, GitHub Actions, people)
+- VPCs, subnets, route tables, NAT gateways
+- Security groups (shared/baseline)
+- DNS zones (Route 53 hosted zones)
+- ACM certificates
+- KMS keys
+- S3 buckets (for logs, artifacts)
+- OIDC providers (GitHub Actions, Terraform Cloud)
+
+**Change Frequency**: Rarely (weeks to months)
+
+#### Platform Layer (`platform-layer/`)
+
+**Purpose**: Compute platforms and managed services that application workloads run on. These are AWS-managed resources that provide the runtime environment.
+
+**Contains**:
+
+- **EKS clusters** (control plane, node groups, managed add-ons)
+- ECS clusters
+- RDS instances (shared databases)
+- ElastiCache clusters
+- MSK (Kafka) clusters
+- Load balancers (ALB/NLB shared across applications)
+- Service mesh control plane infrastructure (if AWS-managed)
+
+**Change Frequency**: Infrequently (days to weeks)
+
+**Key Principle**: The Platform Layer provides the compute substrate. It answers: "Where do workloads run?"
+
+#### Applications Layer (`applications-layer/`)
+
+**Purpose**: Application workloads deployed to the platforms, and any application-specific AWS resources.
+
+**Contains**:
+
+- **Kubernetes workloads deployed via Terraform** (when not using GitOps):
+  - Cluster utilities: Istio, Kyverno, Prometheus, Grafana, Jaeger, Tailscale
+  - ArgoCD bootstrap configuration
+  - Namespace and RBAC setup
+  - Initial Helm releases for platform services
+- **Application-specific AWS resources**:
+  - Application-specific S3 buckets
+  - Application-specific RDS databases
+  - SQS queues, SNS topics
+  - Secrets Manager secrets
+  - Application-specific IAM roles (IRSA)
+
+**Change Frequency**: Moderate (days), but see GitOps note below
+
+**GitOps Integration**: In practice, **most application-layer Kubernetes workloads are NOT managed by Terraform**. We use ArgoCD with a GitOps approach:
+
+- Terraform in this layer primarily:
+  1. Bootstraps ArgoCD itself
+  2. Creates AWS resources needed by applications (S3, RDS, IAM roles for service accounts)
+  3. Sets up initial namespaces/RBAC if not managed by ArgoCD
+- Kubernetes manifests for workloads (both utilities like Istio and business apps like web services) live in a **separate GitOps repository** and are managed by ArgoCD
+- This separation keeps Terraform focused on AWS infrastructure while Kubernetes-native tooling manages in-cluster resources
+
+**Workload Categories** (managed via GitOps, not Terraform):
+
+| Category | Examples | Purpose |
+|----------|----------|---------|
+| Cluster Utilities | Istio, Kyverno, Cert-Manager, External-DNS | Foundation for other workloads |
+| Observability | Prometheus, Grafana, Jaeger, Loki | Monitoring and tracing |
+| Security | Falco, Trivy, OPA/Gatekeeper | Runtime security |
+| Connectivity | Tailscale, VPN operators | Secure access |
+| Business Workloads | 3-tier web apps, APIs, workers | End-user facing applications |
+
+#### Sandbox Layer (`sandbox-layer/`) - env-local only
+
+**Purpose**: Experimental and learning resources that don't fit traditional infrastructure patterns.
+
+**Contains**:
+
+- Learning exercises
+- Proof-of-concept configurations
+- Experimental features
+- Training materials
+
+**Change Frequency**: Ad-hoc
 
 ### Why This Structure Was Chosen
 
@@ -225,9 +319,11 @@ terraform {
 Examples:
 
 - `development-foundation-iam-roles-terraform`
-- `development-applications-eks-learning-cluster`
+- `development-foundation-networking`
+- `development-platform-eks`
+- `development-applications-argocd-bootstrap`
 - `management-foundation-iam-roles-for-people`
-- `production-platform-eks-cluster`
+- `production-platform-eks`
 
 For `env-local` using LocalStack, state is stored locally since Terraform Cloud is not needed for local development:
 
@@ -242,14 +338,14 @@ terraform {
 
 ### Module Usage Pattern
 
-```bash
-# env-development/applications-layer/eks-learning-cluster/main.tf
+```hcl
+# env-development/platform-layer/eks/main.tf
 module "eks" {
   source = "../../../terraform-modules/eks"
   
   environment     = "development"
-  cluster_name    = "development-learning-cluster"
-  cluster_version = "1.28"
+  cluster_name    = "development-eks"
+  cluster_version = "1.31"
   
   # Reference foundation layer outputs via Terraform Cloud remote state
   vpc_id     = data.tfe_outputs.networking.values.vpc_id
@@ -260,6 +356,20 @@ module "eks" {
 data "tfe_outputs" "networking" {
   organization = "your-organization"
   workspace    = "development-foundation-networking"
+}
+```
+
+```hcl
+# env-development/applications-layer/argocd-bootstrap/main.tf
+# Minimal Terraform to bootstrap ArgoCD - workloads managed via GitOps after this
+resource "helm_release" "argocd" {
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  namespace        = "argocd"
+  create_namespace = true
+  
+  # ArgoCD then manages all other Kubernetes workloads via GitOps
 }
 ```
 

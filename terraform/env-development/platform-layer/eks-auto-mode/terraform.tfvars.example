@@ -30,7 +30,7 @@ single_nat_gateway = true
 # EKS Configuration
 # -----------------------------------------------------------------------------
 cluster_name       = "eks-auto"
-kubernetes_version = "1.31"
+kubernetes_version = "1.34"
 
 # -----------------------------------------------------------------------------
 # Cluster Access [DECISION REQUIRED]

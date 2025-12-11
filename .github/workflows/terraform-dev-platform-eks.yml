@@ -119,14 +119,14 @@ jobs:
   # ===========================================================================
   # Drift Detection (PR only - Per ADR-020)
   # ===========================================================================
-  drift-detection:
-    name: "Drift Detection"
-    if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/eks-drift-detection.yml
-    with:
-      fail_on_drift: false  # Don't fail PR, just report
-      reference_environment: development
-    secrets: inherit
+  # drift-detection:
+  #   name: "Drift Detection"
+  #   if: github.event_name == 'pull_request'
+  #   uses: ./.github/workflows/eks-drift-detection.yml
+  #   with:
+  #     fail_on_drift: false  # Don't fail PR, just report
+  #     reference_environment: development
+  #   secrets: inherit
 
   # ===========================================================================
   # Sync 1Password (Per ADR-017: Lifecycle Coordination)

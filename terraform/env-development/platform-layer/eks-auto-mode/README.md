@@ -30,7 +30,7 @@ EKS Auto Mode is AWS's fully managed Kubernetes offering that:
 │  └──────────────────┘  └──────────────────┘      │
 ├──────────────────────────────────────────────────┤
 │              EKS Auto Mode Cluster               │
-│  - Kubernetes version: 1.31                      │
+│  - Kubernetes version: 1.34                      │
 │  - Control plane logging enabled                 │
 │  - Secrets encryption (KMS)                      │
 │  - 2 AZs with single NAT (cost optimised)        │
