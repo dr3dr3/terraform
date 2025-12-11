@@ -2,7 +2,7 @@
 
 > Quick reference for all Architecture Decision Records. Read the full ADR for complete context.
 
-**Last Updated**: December 4, 2025
+**Last Updated**: December 8, 2025
 
 ---
 
@@ -27,6 +27,8 @@
 | [ADR-017](./architecture-decision-register/ADR-017-eks-1password-lifecycle-coordination.md) | EKS and 1Password Lifecycle Coordination | Terraform-managed conditional resources with reusable GHA workflow | Approved | 2025-12-03 |
 | [ADR-018](./architecture-decision-register/ADR-018-argocd-bootstrapping.md) | ArgoCD Bootstrapping Strategy for EKS Clusters | Terraform Helm Bootstrap with App of Apps Pattern | Approved | 2025-12-04 |
 | [ADR-019](./architecture-decision-register/ADR-019-argocd-implementation-options.md) | ArgoCD Implementation Options - EKS Capability vs Self-Managed | Hybrid approach: EKS Capability as primary, self-managed for advanced features | Approved | 2025-12-04 |
+| [ADR-020](./architecture-decision-register/ADR-020-eks-per-environment-code-structure.md) | EKS Per-Environment Code Structure | Keep per-environment folders (no shared module) | Approved | 2025-12-05 |
+| [ADR-021](./architecture-decision-register/ADR-021-eks-private-networking-tailscale.md) | EKS Cluster Private Networking with Tailscale | Private EKS with Tailscale subnet router (no NAT Gateway) | Proposed | 2025-12-08 |
 
 ## Superseded Decisions
 

@@ -120,8 +120,8 @@ variable "kubernetes_version" {
   default     = "1.31"
 
   validation {
-    condition     = contains(["1.28", "1.29", "1.30", "1.31"], var.kubernetes_version)
-    error_message = "Kubernetes version must be 1.28, 1.29, 1.30, or 1.31."
+    condition     = contains(["1.28", "1.29", "1.30", "1.31", "1.32", "1.33", "1.34"], var.kubernetes_version)
+    error_message = "Kubernetes version must be 1.28, 1.29, 1.30, 1.31, 1.32, 1.33, or 1.34."
   }
 }
 
