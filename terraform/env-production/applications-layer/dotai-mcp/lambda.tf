@@ -7,9 +7,15 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
 
-  # Image is pushed to ECR by the dotai-mcp GitHub Actions deploy workflow.
-  # On first apply the ECR repo will be empty; push an image before invoking.
-  image_uri = "${aws_ecr_repository.this.repository_url}:latest"
+  # Bootstrap: on first apply this defaults to a public AWS placeholder image so
+  # Terraform can create the Lambda before any real image exists in ECR.
+  # GitHub Actions owns all subsequent image updates via `update-function-code`;
+  # the lifecycle block below ensures Terraform never reverts that.
+  image_uri = var.lambda_image_uri
+
+  lifecycle {
+    ignore_changes = [image_uri]
+  }
 
   memory_size = 256 # Sufficient for a stateless prompts server
   timeout     = 30  # MCP requests resolve well within this limit
