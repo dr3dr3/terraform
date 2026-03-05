@@ -1,0 +1,11 @@
+# =============================================================================
+# terraform.tfvars.example — dotai MCP Server (Production)
+# =============================================================================
+# Run `bash scripts/inject-tfvars.sh` from the workspace root to generate
+# terraform.tfvars with secrets injected from 1Password.
+# The generated terraform.tfvars is gitignored — never commit it.
+# =============================================================================
+
+# Bearer token for MCP client authentication
+# Uses 1Password CLI injection — the secret reference will be replaced with the actual value
+mcp_auth_token = "op://terraform/dotai_mcp_auth_token/notes"

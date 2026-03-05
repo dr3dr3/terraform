@@ -25,8 +25,6 @@ onepassword_vault_name = "terraform"
 aws_region = "ap-southeast-2"
 
 # AWS Account IDs
-# Replace with actual account IDs or use 1Password references
-# aws_account_id_development = "op://terraform/AWS-Development/account_id"
 aws_account_id_development = "126350206316"
 aws_account_id_staging     = ""
 aws_account_id_production  = ""

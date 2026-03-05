@@ -5,6 +5,7 @@
         "dockerfile": "Dockerfile"
     },
 
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
     "workspaceFolder": "/workspace",
 
     // Mount Docker socket to enable Docker/LocalStack from within container
@@ -21,26 +22,43 @@
     "customizations": {
         "vscode": {
             "extensions": [
-                "ms-vscode.live-server",
-                "esbenp.prettier-vscode",
                 "github.vscode-pull-request-github",
-                "ms-azuretools.vscode-docker",
-                "github.copilot",
                 "Anthropic.claude-code",
+                "github.copilot",
+                "github.copilot-chat",
                 "hashicorp.terraform",
                 "hashicorp.hcl",
-                "DavidAnson.vscode-markdownlint"
+                "amazonwebservices.aws-toolkit-vscode",
+                "esbenp.prettier-vscode",
+                "dbaeumer.vscode-eslint",
+                "ms-azuretools.vscode-docker",
+                "ms-vscode.live-server"
             ],
             "settings": {
                 "editor.fontFamily": "FiraCode Nerd Font, monospace",
-                "editor.fontSize": 12,
-                "terminal.integrated.defaultProfile.linux": "fish", 
+                "editor.fontSize": 14,
+                "terminal.integrated.defaultProfile.linux": "bash",
                 "terminal.integrated.profiles.linux": {
-                    "fish": {
-                        "path": "/usr/bin/fish"
+                    "bash": {
+                        "path": "/bin/bash"
                     }
                 }
             }
         }
-    }
+    },
+
+    // Set environment variables
+    "remoteEnv": {
+        "AWS_REGION": "ap-southeast-2"
+    },
+    
+    // Connect as the non-root user.
+    // Hardcoded to match ARG USERNAME=dev in the Dockerfile.
+    // If you change the USERNAME build arg, update this value to match.
+    "remoteUser": "dev",
+
+    // Configure git identity at container start (runs as the remoteUser).
+    // This ensures the correct identity is used for commits made inside the container.
+    // Install gh-copilot extension here (user-scoped, runs as remoteUser after container start)
+    "postCreateCommand": "git config --global user.name 'André Dreyer' && git config --global user.email 'github@andredreyer.com'"
 }

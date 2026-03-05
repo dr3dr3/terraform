@@ -71,7 +71,7 @@ resource "tfe_variable" "management_foundation_iam_people_auth" {
 resource "tfe_variable" "management_foundation_iam_people_role_arn" {
   workspace_id = tfe_workspace.management_foundation_iam_people.id
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
+  value        = local.tfc_oidc_role_arn_management
   category     = "env"
   description  = "AWS IAM role ARN for OIDC authentication"
 }
@@ -138,7 +138,7 @@ resource "tfe_variable" "management_foundation_gha_oidc_auth" {
 resource "tfe_variable" "management_foundation_gha_oidc_role_arn" {
   workspace_id = tfe_workspace.management_foundation_gha_oidc.id
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::169506999567:role/terraform-cloud-oidc-role"
+  value        = local.tfc_oidc_role_arn_management
   category     = "env"
   description  = "AWS IAM role ARN for OIDC authentication"
 }
@@ -300,7 +300,7 @@ resource "tfe_variable" "dev_foundation_gha_oidc_auth" {
 
 resource "tfe_variable" "dev_foundation_gha_oidc_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::126350206316:role/terraform-dev-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_dev
   category     = "env"
   workspace_id = tfe_workspace.dev_foundation_gha_oidc.id
   description  = "AWS IAM role ARN for OIDC authentication"
@@ -345,7 +345,7 @@ resource "tfe_variable" "dev_foundation_iam_roles_auth" {
 
 resource "tfe_variable" "dev_foundation_iam_roles_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::126350206316:role/terraform-dev-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_dev
   category     = "env"
   workspace_id = tfe_workspace.dev_foundation_iam_roles_terraform.id
   description  = "AWS IAM role ARN for OIDC authentication"
@@ -400,7 +400,7 @@ resource "tfe_variable" "staging_foundation_iam_roles_auth" {
 
 resource "tfe_variable" "staging_foundation_iam_roles_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::163436765579:role/terraform-stg-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_staging
   category     = "env"
   workspace_id = tfe_workspace.staging_foundation_iam_roles.id
   description  = "AWS IAM role ARN for OIDC authentication (bootstrap: create role manually first)"
@@ -442,7 +442,7 @@ resource "tfe_variable" "staging_foundation_gha_oidc_auth" {
 
 resource "tfe_variable" "staging_foundation_gha_oidc_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::163436765579:role/terraform-stg-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_staging
   category     = "env"
   workspace_id = tfe_workspace.staging_foundation_gha_oidc.id
   description  = "AWS IAM role ARN for OIDC authentication"
@@ -526,7 +526,7 @@ resource "tfe_variable" "production_foundation_iam_roles_auth" {
 
 resource "tfe_variable" "production_foundation_iam_roles_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::820485071161:role/terraform-prod-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_production
   category     = "env"
   workspace_id = tfe_workspace.production_foundation_iam_roles.id
   description  = "AWS IAM role ARN for OIDC authentication (bootstrap: create role manually first)"
@@ -568,7 +568,7 @@ resource "tfe_variable" "production_foundation_gha_oidc_auth" {
 
 resource "tfe_variable" "production_foundation_gha_oidc_role_arn" {
   key          = "TFC_AWS_RUN_ROLE_ARN"
-  value        = "arn:aws:iam::820485071161:role/terraform-prod-foundation-cicd-role"
+  value        = local.tfc_cicd_role_arn_production
   category     = "env"
   workspace_id = tfe_workspace.production_foundation_gha_oidc.id
   description  = "AWS IAM role ARN for OIDC authentication"
@@ -672,6 +672,75 @@ resource "tfe_workspace" "sandbox_platform_eks" {
     Purpose     = "Learning"
     AutoCleanup = "False" # Protected - infrastructure workspace
   }
+}
+
+################################################################################
+# Development Environment - Applications Layer
+################################################################################
+
+################################################################################
+# Production Environment - Applications Layer
+################################################################################
+
+# Production - Applications Layer - dotai MCP Server
+# ADR-014: VCS-driven, Manual apply (production always requires approval)
+resource "tfe_workspace" "production_applications_dotai_mcp" {
+  name         = "production-applications-dotai-mcp"
+  organization = data.tfe_organization.main.name
+  project_id   = tfe_project.aws_production.id
+  description  = "ECR, Lambda, Function URL, IAM, and SSM for the dotai personal MCP server (production)"
+
+  # VCS-driven: speculative plans on PRs, manual apply on merge to main
+  vcs_repo {
+    identifier     = local.vcs_repo.identifier
+    oauth_token_id = local.vcs_repo.oauth_token_id
+    branch         = local.vcs_repo.branch
+  }
+
+  trigger_prefixes = ["terraform/env-production/applications-layer/dotai-mcp"]
+
+  working_directory = "terraform/env-production/applications-layer/dotai-mcp"
+  terraform_version = "~> 1.14.0"
+  auto_apply        = false # Production always requires manual approval
+
+  tags = {
+    Environment = "Production"
+    Layer       = "Applications"
+    AwsAccount  = "Production"
+    ManagedBy   = "Terraform-Cloud"
+    Owner       = "Platform-Team"
+    CICD        = "Vcs"
+    Workload    = "DotaiMcp"
+  }
+}
+
+# TFC OIDC variables - dotai MCP production
+resource "tfe_variable" "production_applications_dotai_mcp_auth" {
+  workspace_id = tfe_workspace.production_applications_dotai_mcp.id
+  key          = "TFC_AWS_PROVIDER_AUTH"
+  value        = "true"
+  category     = "env"
+  description  = "Enable AWS provider authentication via OIDC"
+}
+
+resource "tfe_variable" "production_applications_dotai_mcp_role_arn" {
+  workspace_id = tfe_workspace.production_applications_dotai_mcp.id
+  key          = "TFC_AWS_RUN_ROLE_ARN"
+  value        = local.tfc_cicd_role_arn_prod_applications
+  category     = "env"
+  description  = "AWS IAM role ARN for OIDC authentication (production applications role)"
+}
+
+# Sensitive Terraform variable - MCP bearer token
+# Note: set the actual value manually in TFC (sensitive variables cannot hold
+# their value in VCS-stored Terraform code).
+resource "tfe_variable" "production_applications_dotai_mcp_auth_token" {
+  workspace_id = tfe_workspace.production_applications_dotai_mcp.id
+  key          = "mcp_auth_token"
+  value        = "" # Set manually in TFC UI / CLI — never commit the real value
+  category     = "terraform"
+  sensitive    = true
+  description  = "Bearer token for dotai MCP server authentication (set manually in TFC)"
 }
 
 # # Management - Foundation Layer - Terraform Cloud Management (This workspace!

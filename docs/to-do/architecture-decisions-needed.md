@@ -16,7 +16,7 @@
 | Security & Authentication | ✅ Decided | ADR-005, ADR-006, ADR-007, ADR-008, ADR-010, ADR-015 |
 | Deployment Workflow | ✅ Decided | ADR-002, ADR-014 |
 | Automated Testing | 🔴 Needs ADR | - |
-| Module Versioning Strategy | 🔴 Needs ADR | - |
+| Module Versioning Strategy | ⚠️ Draft ADR | ADR-022 (Draft — needs review) |
 | Sandbox Cleanup Automation | ⏳ Proposed | ADR-012 |
 
 ---
@@ -51,39 +51,13 @@
 
 ---
 
-### 🔴 HIGH PRIORITY: Module Versioning Strategy
+### ⚠️ DRAFT ADR: Module Versioning Strategy
 
-**Status**: No ADR exists
+**Status**: Draft ADR created — [ADR-022: Module Versioning Strategy](../reference/architecture-decision-register/ADR-022-module-versioning-strategy.md)
 
-**Current state**: Reusable modules exist in `terraform-modules/` but lack a versioning strategy:
+**Action needed**: Review and approve ADR-022. Once approved, implement Phase 1 (tag existing modules, update all consumers to pin versions).
 
-```text
-terraform-modules/
-├── permission-set/
-└── terraform-oidc-role/
-```
-
-**What's needed**: An ADR defining:
-
-- Git tagging convention for module versions (e.g., `module-name/v1.0.0`)
-- Semantic versioning rules (when to bump major/minor/patch)
-- How environments reference specific module versions
-- Module release and promotion process
-- Breaking change communication
-
-**Best practice reference**:
-
-```hcl
-# Recommended: Pin to specific version
-module "oidc_role" {
-  source = "git::https://github.com/dr3dr3/terraform.git//terraform-modules/terraform-oidc-role?ref=terraform-oidc-role/v1.2.0"
-}
-
-# NOT recommended: Using main branch
-module "oidc_role" {
-  source = "git::https://github.com/dr3dr3/terraform.git//terraform-modules/terraform-oidc-role?ref=main"
-}
-```
+**Summary of decision**: Git tag-based versioning using module-namespaced tags (e.g. `terraform-oidc-role/v1.0.0`). Consumers pin with `?ref=` in the module source. Never use `?ref=main` in `terraform/` folders.
 
 ---
 

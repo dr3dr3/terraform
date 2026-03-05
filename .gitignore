@@ -1,3 +1,7 @@
+# Ignore these folders that I use:
+repos/
+dotfiles/
+
 # Local .terraform directories
 **/.terraform/*
 
