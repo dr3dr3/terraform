@@ -6,12 +6,82 @@ This directory contains GitHub Actions workflows for Terraform infrastructure pr
 
 | Workflow | File | Description |
 |----------|------|-------------|
-| Dev Platform EKS | `terraform-dev-platform-eks.yml` | Provisions EKS cluster in development (auto-apply) |
+| Dev Platform EKS | `terraform-dev-platform-eks.yml` | Provisions EKS cluster in development (auto-apply on push) |
 | Staging Platform EKS | `terraform-staging-platform-eks.yml` | Provisions EKS cluster in staging (requires approval) |
 | Production Platform EKS | `terraform-prod-platform-eks.yml` | Provisions EKS cluster in production (requires approval + confirmation) |
-| EKS TTL Check | `eks-ttl-check.yml` | Daily check for expired clusters (auto-destroy for dev/staging) |
-| Reusable: Terraform EKS | `reusable-terraform-eks.yml` | Shared workflow for EKS operations |
-| Reusable: 1Password Sync | `reusable-1password-eks-sync.yml` | Syncs EKS details to 1Password |
+| EKS TTL Check | `eks-ttl-check.yml` | Runs every 6h — destroys clusters that exceed their TTL |
+| EKS Drift Detection | `eks-drift-detection.yml` | Detects configuration drift in EKS clusters |
+| Reusable: Terraform | `reusable-terraform.yml` | **Generic** reusable workflow for any Terraform workspace |
+| Reusable: Terraform EKS | `reusable-terraform-eks.yml` | EKS-specific reusable workflow (includes TTL tagging + EKS outputs) |
+| Reusable: 1Password Sync | `reusable-1password-eks-sync.yml` | Syncs EKS cluster credentials to 1Password |
+
+## Which Reusable Workflow to Use?
+
+| Situation | Use |
+|-----------|-----|
+| New EKS cluster workspace | `reusable-terraform-eks.yml` — handles TTL tagging, cluster outputs |
+| Any other Terraform workspace (applications, foundation, etc.) | `reusable-terraform.yml` — generic plan/apply/destroy |
+
+### Example — Using the Generic Workflow for an Application Layer Workspace
+
+```yaml
+name: "Terraform: Dev Applications - My Service"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "terraform/env-development/applications-layer/my-service/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/env-development/applications-layer/my-service/**"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action"
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: terraform-dev-applications-my-service
+  cancel-in-progress: false
+
+jobs:
+  determine-action:
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.set.outputs.action }}
+    steps:
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "action=plan" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "action=apply" >> $GITHUB_OUTPUT
+          else
+            echo "action=${{ inputs.action }}" >> $GITHUB_OUTPUT
+          fi
+
+  terraform:
+    needs: determine-action
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: development
+      action: ${{ needs.determine-action.outputs.action }}
+      working_directory: terraform/env-development/applications-layer/my-service
+      tf_workspace: development-applications-my-service
+      require_approval: false
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV_APPLICATIONS }}
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+```
 
 ## Environment-Specific Behaviour
 

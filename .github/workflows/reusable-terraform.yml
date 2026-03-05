@@ -1,0 +1,359 @@
+# =============================================================================
+# GitHub Actions Workflow: Reusable Terraform (Generic)
+# =============================================================================
+# A generic reusable workflow for Terraform plan/apply/destroy operations
+# on any workspace — not tied to EKS or any specific resource type.
+#
+# Use this for:
+#   - Application layer workspaces
+#   - Foundation layer one-off manual triggers
+#   - Any new GHA-driven workspace that isn't EKS-specific
+#
+# For EKS workspaces with TTL-based auto-destroy, use reusable-terraform-eks.yml
+#
+# Caller example:
+#
+#   jobs:
+#     terraform:
+#       uses: ./.github/workflows/reusable-terraform.yml
+#       with:
+#         environment: development
+#         action: plan
+#         working_directory: terraform/env-development/applications-layer/my-service
+#         tf_workspace: development-applications-my-service
+#       secrets:
+#         AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_DEV_APPLICATIONS }}
+#         TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+# =============================================================================
+
+name: "Reusable: Terraform"
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: "Target environment (development, staging, production, sandbox, management)"
+        required: true
+        type: string
+      action:
+        description: "Terraform action to perform (plan, apply, destroy)"
+        required: true
+        type: string
+        default: "plan"
+      working_directory:
+        description: "Path to the Terraform working directory (relative to repo root)"
+        required: true
+        type: string
+      tf_workspace:
+        description: "Terraform Cloud workspace name (for display purposes)"
+        required: true
+        type: string
+      require_approval:
+        description: "Require a GitHub Environment approval gate before apply/destroy"
+        required: false
+        type: boolean
+        default: false
+      terraform_version:
+        description: "Terraform version constraint (defaults to ~> 1.14.0)"
+        required: false
+        type: string
+        default: "~> 1.14.0"
+      aws_region:
+        description: "AWS region"
+        required: false
+        type: string
+        default: "ap-southeast-2"
+    secrets:
+      AWS_ROLE_ARN:
+        description: "AWS IAM role ARN for OIDC authentication"
+        required: true
+      TF_API_TOKEN:
+        description: "Terraform Cloud API token"
+        required: true
+      OP_SERVICE_ACCOUNT_TOKEN:
+        description: "1Password Service Account token (optional — for secret injection)"
+        required: false
+
+jobs:
+  # ===========================================================================
+  # Terraform Plan
+  # ===========================================================================
+  terraform-plan:
+    name: "Terraform Plan"
+    runs-on: ubuntu-latest
+    if: inputs.action != 'destroy'
+    outputs:
+      plan_exit_code: ${{ steps.plan.outputs.exitcode }}
+      has_changes: ${{ steps.plan.outputs.exitcode == '2' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: gha-terraform-plan-${{ github.run_id }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Inject .tfvars from 1Password (if token provided)
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if [[ -f "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh" ]]; then
+            bash "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh"
+          fi
+
+      - name: Terraform Format Check
+        id: fmt
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          terraform plan \
+            -no-color \
+            -input=false \
+            -out=tfplan \
+            -detailed-exitcode
+        continue-on-error: true
+
+      - name: Extract Plan Output
+        if: always() && steps.plan.outcome != 'skipped'
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform show -no-color tfplan > plan_output.txt 2>/dev/null || echo "No plan file available" > plan_output.txt
+
+      - name: Upload Plan Artifact
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ inputs.tf_workspace }}
+          path: ${{ inputs.working_directory }}/tfplan
+          retention-days: 5
+
+      - name: Post Plan Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('${{ inputs.working_directory }}/plan_output.txt', 'utf8');
+            } catch(e) {
+              planOutput = 'Plan output not available.';
+            }
+
+            const maxLength = 60000;
+            const truncated = planOutput.length > maxLength
+              ? planOutput.substring(0, maxLength) + '\n\n... (output truncated — see full run for details)'
+              : planOutput;
+
+            const fmtStatus  = '${{ steps.fmt.outcome }}'     === 'success' ? '✅ Passed' : '⚠️ Has formatting issues';
+            const initStatus = '${{ steps.init.outcome }}'    === 'success' ? '✅ Passed' : '❌ Failed';
+            const valStatus  = '${{ steps.validate.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+            const planCode   = '${{ steps.plan.outputs.exitcode }}';
+            const planStatus = planCode === '0' ? '✅ No changes'
+                             : planCode === '2' ? '⚠️ Changes detected'
+                                               : '❌ Error';
+
+            const body = `## Terraform Plan — \`${{ inputs.tf_workspace }}\` 🏗️
+
+            | Check | Result |
+            |-------|--------|
+            | Format | ${fmtStatus} |
+            | Init   | ${initStatus} |
+            | Validate | ${valStatus} |
+            | Plan   | ${planStatus} |
+
+            **Environment:** \`${{ inputs.environment }}\`
+            **Directory:** \`${{ inputs.working_directory }}\`
+
+            <details>
+            <summary>Show Plan Output</summary>
+
+            \`\`\`hcl
+            ${truncated}
+            \`\`\`
+
+            </details>
+
+            ---
+            *Workflow: \`${{ github.workflow }}\` | [Run #${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*`;
+
+            // Delete any previous plan comments from this workflow on this PR
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            for (const comment of comments.data) {
+              if (comment.body.includes('Terraform Plan') && comment.body.includes('${{ inputs.tf_workspace }}')) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              }
+            }
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body,
+            });
+
+      - name: Fail if Plan Errored
+        if: steps.plan.outputs.exitcode == '1'
+        run: exit 1
+
+  # ===========================================================================
+  # Terraform Apply
+  # ===========================================================================
+  terraform-apply:
+    name: "Terraform Apply"
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: |
+      inputs.action == 'apply' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    environment: ${{ inputs.require_approval && inputs.environment || '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: gha-terraform-apply-${{ github.run_id }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Inject .tfvars from 1Password (if token provided)
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if [[ -f "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh" ]]; then
+            bash "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh"
+          fi
+
+      - name: Download Plan Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}-${{ inputs.tf_workspace }}
+          path: ${{ inputs.working_directory }}
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform apply -auto-approve -input=false tfplan
+
+      - name: Post Apply Summary
+        run: |
+          echo "## Terraform Apply Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Workspace** | \`${{ inputs.tf_workspace }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Directory** | \`${{ inputs.working_directory }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run** | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Terraform Destroy
+  # ===========================================================================
+  terraform-destroy:
+    name: "Terraform Destroy"
+    runs-on: ubuntu-latest
+    if: inputs.action == 'destroy'
+    environment: ${{ inputs.environment }}-destroy
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: gha-terraform-destroy-${{ github.run_id }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Inject .tfvars from 1Password (if token provided)
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          if [[ -f "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh" ]]; then
+            bash "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh"
+          fi
+
+      - name: Terraform Init
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform init
+
+      - name: Terraform Destroy Plan (show what will be removed)
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform plan -destroy -no-color -input=false
+
+      - name: Terraform Destroy
+        working-directory: ${{ inputs.working_directory }}
+        run: terraform destroy -auto-approve -input=false
+
+      - name: Post Destroy Summary
+        run: |
+          echo "## Terraform Destroy Complete 🗑️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Workspace** | \`${{ inputs.tf_workspace }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | \`${{ inputs.environment }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Initiated by** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Time** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY

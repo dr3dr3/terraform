@@ -370,6 +370,55 @@ data "aws_iam_policy_document" "applications_permissions" {
     ]
   }
 
+  # ECR Repository Management (for container-image Lambda functions)
+  statement {
+    sid    = "ECRManagement"
+    effect = "Allow"
+    actions = [
+      "ecr:CreateRepository",
+      "ecr:DeleteRepository",
+      "ecr:DescribeRepositories",
+      "ecr:PutImageScanningConfiguration",
+      "ecr:PutImageTagMutability",
+      "ecr:PutLifecyclePolicy",
+      "ecr:GetLifecyclePolicy",
+      "ecr:DeleteLifecyclePolicy",
+      "ecr:TagResource",
+      "ecr:UntagResource",
+      "ecr:ListTagsForResource",
+    ]
+    resources = ["*"]
+  }
+
+  # SSM Parameter Store (for storing sensitive config like MCP auth tokens)
+  statement {
+    sid    = "SSMParameterManagement"
+    effect = "Allow"
+    actions = [
+      "ssm:PutParameter",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:DeleteParameter",
+      "ssm:DescribeParameters",
+      "ssm:AddTagsToResource",
+      "ssm:RemoveTagsFromResource",
+      "ssm:ListTagsForResource",
+    ]
+    resources = ["*"]
+  }
+
+  # KMS for SSM SecureString encryption/decryption
+  statement {
+    sid    = "KMSForSSMSecureString"
+    effect = "Allow"
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt",
+      "kms:DescribeKey",
+    ]
+    resources = ["*"]
+  }
+
   # CloudWatch Logs for Lambda
   statement {
     sid    = "CloudWatchLogsForLambda"

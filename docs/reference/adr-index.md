@@ -2,7 +2,7 @@
 
 > Quick reference for all Architecture Decision Records. Read the full ADR for complete context.
 
-**Last Updated**: December 8, 2025
+**Last Updated**: March 2026
 
 ---
 
@@ -22,6 +22,7 @@
 | [ADR-010](./architecture-decision-register/ADR-010-aws-aim-role-structure.md) | AWS IAM Role Structure for Terraform OIDC Authentication | Tiered IAM role structure based on environment separation | Approved | 2025-11-02 |
 | [ADR-011](./architecture-decision-register/ADR-011-sandbox-environment.md) | Sandbox Environment for Testing and Experimentation | Dedicated AWS account with standard layers + experiments layer | Approved | 2025-11-17 |
 | [ADR-012](./architecture-decision-register/ADR-012-sandbox-automated-cleanup.md) | Automated Resource Cleanup for Sandbox Environment | Hybrid: Terraform Destroy + AWS Nuke v3 | Proposed | 2024-11-24 |
+| [ADR-014](./architecture-decision-register/ADR-014-terraform-workspace-triggers.md) | Terraform Workspace Trigger Strategy | Tiered: CLI (foundation), GHA (platform/dev), VCS (sandbox/staging) | Approved | 2025-11 |
 | [ADR-015](./architecture-decision-register/ADR-015-user-personas-aws-sso-eks.md) | User Personas for AWS SSO and EKS RBAC | 5-tier persona model with least privilege | Approved | 2025-11-29 |
 | [ADR-016](./architecture-decision-register/ADR-016-eks-credentials-cross-repo-access.md) | EKS Cluster Credentials and Cross-Repository Access | Store cluster details in 1Password + AWS SSO for auth | Approved | 2025-12-01 |
 | [ADR-017](./architecture-decision-register/ADR-017-eks-1password-lifecycle-coordination.md) | EKS and 1Password Lifecycle Coordination | Terraform-managed conditional resources with reusable GHA workflow | Approved | 2025-12-03 |
@@ -29,6 +30,7 @@
 | [ADR-019](./architecture-decision-register/ADR-019-argocd-implementation-options.md) | ArgoCD Implementation Options - EKS Capability vs Self-Managed | Hybrid approach: EKS Capability as primary, self-managed for advanced features | Approved | 2025-12-04 |
 | [ADR-020](./architecture-decision-register/ADR-020-eks-per-environment-code-structure.md) | EKS Per-Environment Code Structure | Keep per-environment folders (no shared module) | Approved | 2025-12-05 |
 | [ADR-021](./architecture-decision-register/ADR-021-eks-private-networking-tailscale.md) | EKS Cluster Private Networking with Tailscale | Private EKS with Tailscale subnet router (no NAT Gateway) | Proposed | 2025-12-08 |
+| [ADR-022](./architecture-decision-register/ADR-022-module-versioning-strategy.md) | Module Versioning Strategy | Git tag-based versioning with module-namespaced tags | Draft | 2026-03 |
 
 ## Superseded Decisions
 
