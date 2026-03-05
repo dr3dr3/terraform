@@ -25,3 +25,9 @@ variable "mcp_auth_token" {
   type        = string
   sensitive   = true
 }
+
+variable "lambda_image_uri" {
+  description = "Container image URI for the Lambda function. Defaults to a public AWS placeholder on first deploy; GitHub Actions owns all subsequent updates."
+  type        = string
+  default     = "public.ecr.aws/lambda/nodejs:22"
+}
