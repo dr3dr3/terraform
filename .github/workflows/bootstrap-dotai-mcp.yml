@@ -117,6 +117,7 @@ jobs:
             -input=false \
             -target=aws_ecr_repository.this \
             -target=aws_ecr_lifecycle_policy.this \
+            -target=aws_ecr_repository_policy.lambda_pull \
             -var="lambda_image_uri=placeholder"
 
       # ---------------------------------------------------------------------------
