@@ -107,7 +107,6 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Install 1Password CLI
-        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
         uses: 1password/install-cli-action@v1
 
       - name: Inject .tfvars from 1Password (if token provided)
@@ -268,7 +267,6 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Install 1Password CLI
-        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
         uses: 1password/install-cli-action@v1
 
       - name: Inject .tfvars from 1Password (if token provided)
@@ -334,7 +332,6 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: Install 1Password CLI
-        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
         uses: 1password/install-cli-action@v1
 
       - name: Inject .tfvars from 1Password (if token provided)
