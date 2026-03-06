@@ -9,3 +9,7 @@
 # Bearer token for MCP client authentication
 # Uses 1Password CLI injection — the secret reference will be replaced with the actual value
 mcp_auth_token = "op://terraform/dotai_mcp_auth_token/notes"
+
+# ECR image URI — set to the private ECR image pushed by CI before the first apply
+# e.g. "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/dotai-mcp:latest"
+lambda_image_uri = ""

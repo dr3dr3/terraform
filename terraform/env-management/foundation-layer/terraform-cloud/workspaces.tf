@@ -483,7 +483,7 @@ resource "tfe_workspace" "staging_platform_eks" {
 #
 # Per ADR-014:
 # - Foundation: CLI-driven, Manual apply
-# - Application: VCS-driven, Manual apply (speculative plans on PRs)
+# - Application: API/GHA-driven, Manual apply (CI/CD gates + audit trail)
 # - Platform: API/GHA-driven, Manual apply (requires approval)
 #
 ################################################################################
@@ -683,25 +683,24 @@ resource "tfe_workspace" "sandbox_platform_eks" {
 ################################################################################
 
 # Production - Applications Layer - dotai MCP Server
-# ADR-014: VCS-driven, Manual apply (production always requires approval)
+# ADR-014: API/GHA-driven, Manual apply (production always requires approval)
+# GHA workflow: .github/workflows/terraform-prod-dotai-mcp.yml
 resource "tfe_workspace" "production_applications_dotai_mcp" {
   name         = "production-applications-dotai-mcp"
   organization = data.tfe_organization.main.name
   project_id   = tfe_project.aws_production.id
   description  = "ECR, Lambda, Function URL, IAM, and SSM for the dotai personal MCP server (production)"
 
-  # VCS-driven: speculative plans on PRs, manual apply on merge to main
-  vcs_repo {
-    identifier     = local.vcs_repo.identifier
-    oauth_token_id = local.vcs_repo.oauth_token_id
-    branch         = local.vcs_repo.branch
-  }
-
-  trigger_prefixes = ["terraform/env-production/applications-layer/dotai-mcp"]
+  # API/GHA-driven: No VCS repo — triggered exclusively by GitHub Actions.
+  # Plans on PRs and applies on merge are orchestrated by terraform-prod-dotai-mcp.yml.
+  # vcs_repo block intentionally omitted per ADR-014
 
   working_directory = "terraform/env-production/applications-layer/dotai-mcp"
   terraform_version = "~> 1.14.0"
   auto_apply        = false # Production always requires manual approval
+
+  # Allow runs to be triggered externally (by GitHub Actions)
+  queue_all_runs = false
 
   tags = {
     Environment = "Production"
@@ -709,7 +708,7 @@ resource "tfe_workspace" "production_applications_dotai_mcp" {
     AwsAccount  = "Production"
     ManagedBy   = "Terraform-Cloud"
     Owner       = "Platform-Team"
-    CICD        = "Vcs"
+    CICD        = "Github-Actions" # ADR-014: API/GHA-driven trigger
     Workload    = "DotaiMcp"
   }
 }
@@ -732,16 +731,22 @@ resource "tfe_variable" "production_applications_dotai_mcp_role_arn" {
 }
 
 # Sensitive Terraform variable - MCP bearer token
-# Note: set the actual value manually in TFC (sensitive variables cannot hold
-# their value in VCS-stored Terraform code).
+# The real value must be set manually in TFC UI / CLI after this workspace is applied.
+# This placeholder creates the variable slot; a blank value will fail the variable
+# validation block in variables.tf until the real token is set.
 resource "tfe_variable" "production_applications_dotai_mcp_auth_token" {
   workspace_id = tfe_workspace.production_applications_dotai_mcp.id
   key          = "mcp_auth_token"
   value        = "" # Set manually in TFC UI / CLI — never commit the real value
   category     = "terraform"
   sensitive    = true
-  description  = "Bearer token for dotai MCP server authentication (set manually in TFC)"
+  description  = "Bearer token for dotai MCP server authentication — set manually in TFC before first GHA-triggered plan"
 }
+
+# lambda_image_uri is set by the bootstrap workflow (bootstrap-dotai-mcp.yml)
+# and updated automatically by the deploy workflow in dr3dr3/dotai-mcp.
+# A placeholder resource is not created here because the bootstrap workflow
+# sets it via the TFC API and the variable must not be overwritten to empty.
 
 # # Management - Foundation Layer - Terraform Cloud Management (This workspace!
 # resource "tfe_workspace" "management_foundation_terraform_cloud" {

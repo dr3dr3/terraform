@@ -1,0 +1,248 @@
+# =============================================================================
+# GitHub Actions Workflow: Bootstrap dotai-MCP Production
+# =============================================================================
+# ONE-TIME USE — run this before the first Terraform apply for dotai-mcp.
+#
+# The chicken-and-egg problem: Lambda requires a valid private ECR image to
+# be created, but ECR doesn't exist until Terraform runs. A full apply fails
+# because both resources are provisioned simultaneously.
+#
+# This workflow sequences the steps that Terraform cannot:
+#   1. Targeted apply to create the ECR repository only
+#   2. Pull the public Lambda Node.js base image, retag, and push to private ECR
+#      (gives Lambda a valid image URI without needing the full app build)
+#   3. Full apply to create Lambda, Function URL, IAM, SSM, and all other resources
+#
+# After this runs once, the normal flow takes over:
+#   - Terraform Cloud applies on merge to main (infra changes)
+#   - dr3dr3/dotai-mcp deploy.yml pushes real application images on merge to main
+# =============================================================================
+
+name: "Bootstrap: dotai-MCP Production"
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'BOOTSTRAP' to confirm this one-time bootstrap operation"
+        required: true
+        type: string
+
+# Only one bootstrap can run at a time
+concurrency:
+  group: bootstrap-dotai-mcp-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # Required for OIDC auth to AWS
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-2
+  ECR_REPO: dotai
+  LAMBDA_FUNCTION: dotai
+  TF_DIR: terraform/env-production/applications-layer/dotai-mcp
+  TF_WORKSPACE: production-applications-dotai-mcp
+
+jobs:
+  # ===========================================================================
+  # Validate confirmation input before doing anything
+  # ===========================================================================
+  validate:
+    name: "Validate Confirmation"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [[ "${{ github.event.inputs.confirm }}" != "BOOTSTRAP" ]]; then
+            echo "## ❌ Confirmation Required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Re-run this workflow and type \`BOOTSTRAP\` in the confirmation field." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "✅ Confirmation accepted" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Bootstrap sequence
+  # ===========================================================================
+  bootstrap:
+    name: "Bootstrap"
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production  # Requires GitHub Environment approval gate
+
+    steps:
+      - name: Checkout terraform repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD_APPLICATIONS }}
+          role-session-name: gha-bootstrap-dotai-mcp-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.14.0"
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Inject .tfvars from 1Password
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+        working-directory: ${{ env.TF_DIR }}
+        run: bash "${GITHUB_WORKSPACE}/scripts/inject-tfvars.sh"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      # ---------------------------------------------------------------------------
+      # Step 1: Create the ECR repository only.
+      # lambda_image_uri is passed via -var to satisfy variable validation — the
+      # Lambda resource is not targeted so this value is never used.
+      # ---------------------------------------------------------------------------
+      - name: "Step 1/3 — Targeted Apply: ECR repository"
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -target=aws_ecr_repository.this \
+            -target=aws_ecr_lifecycle_policy.this \
+            -var="lambda_image_uri=placeholder"
+
+      # ---------------------------------------------------------------------------
+      # Step 2: Pull the public Lambda Node.js base image, retag, and push to the
+      # private ECR repository. Lambda accepts private ECR images; the public image
+      # URI in aws_lambda_function is what triggers the original error.
+      # The real application image will be pushed by dr3dr3/dotai-mcp on next merge.
+      # ---------------------------------------------------------------------------
+      - name: Derive private ECR URI
+        id: ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:bootstrap"
+          echo "uri=${ECR_URI}" >> "$GITHUB_OUTPUT"
+          echo "ECR URI: ${ECR_URI}"
+
+      - name: Login to private ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: "Step 2/3 — Pull public base image, retag, push to private ECR"
+        run: |
+          # Public ECR pull does not require authentication
+          docker pull public.ecr.aws/lambda/nodejs:22
+
+          docker tag \
+            public.ecr.aws/lambda/nodejs:22 \
+            "${{ steps.ecr.outputs.uri }}"
+
+          docker push "${{ steps.ecr.outputs.uri }}"
+
+          echo "✅ Pushed bootstrap image to ${{ steps.ecr.outputs.uri }}"
+
+      # ---------------------------------------------------------------------------
+      # Step 3: Full apply. All remaining resources (Lambda, Function URL, IAM, SSM)
+      # are created in a single plan. lambda_image_uri is passed via -var so the
+      # lifecycle.ignore_changes block takes effect immediately — GitHub Actions
+      # owns all future image updates via update-function-code.
+      # ---------------------------------------------------------------------------
+      - name: "Step 3/3 — Full Terraform Apply"
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform apply \
+            -auto-approve \
+            -input=false \
+            -var="lambda_image_uri=${{ steps.ecr.outputs.uri }}"
+
+      # ---------------------------------------------------------------------------
+      # Step 4 (housekeeping): Set lambda_image_uri in the TFC workspace so that
+      # future terraform plan/apply runs in Terraform Cloud have a valid value.
+      # Without this, TFC would fail validation on the next plan after bootstrap.
+      # ---------------------------------------------------------------------------
+      - name: Set lambda_image_uri in TFC workspace variables
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          # Fetch the workspace to get its ID
+          WORKSPACE_ID=$(curl -fsSL \
+            -H "Authorization: Bearer ${TF_API_TOKEN}" \
+            -H "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/Datafaced/workspaces/${TF_WORKSPACE}" \
+            | jq -r '.data.id')
+
+          echo "TFC workspace ID: ${WORKSPACE_ID}"
+
+          # Check if the variable already exists
+          EXISTING_VAR_ID=$(curl -fsSL \
+            -H "Authorization: Bearer ${TF_API_TOKEN}" \
+            -H "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" \
+            | jq -r '.data[] | select(.attributes.key == "lambda_image_uri") | .id')
+
+          if [[ -n "${EXISTING_VAR_ID}" ]]; then
+            # Update existing variable
+            curl -fsSL \
+              -X PATCH \
+              -H "Authorization: Bearer ${TF_API_TOKEN}" \
+              -H "Content-Type: application/vnd.api+json" \
+              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars/${EXISTING_VAR_ID}" \
+              -d "{
+                \"data\": {
+                  \"type\": \"vars\",
+                  \"id\": \"${EXISTING_VAR_ID}\",
+                  \"attributes\": {
+                    \"value\": \"${{ steps.ecr.outputs.uri }}\",
+                    \"sensitive\": false
+                  }
+                }
+              }"
+            echo "✅ Updated existing lambda_image_uri variable in TFC workspace"
+          else
+            # Create new variable
+            curl -fsSL \
+              -X POST \
+              -H "Authorization: Bearer ${TF_API_TOKEN}" \
+              -H "Content-Type: application/vnd.api+json" \
+              "https://app.terraform.io/api/v2/workspaces/${WORKSPACE_ID}/vars" \
+              -d "{
+                \"data\": {
+                  \"type\": \"vars\",
+                  \"attributes\": {
+                    \"key\": \"lambda_image_uri\",
+                    \"value\": \"${{ steps.ecr.outputs.uri }}\",
+                    \"category\": \"terraform\",
+                    \"sensitive\": false,
+                    \"description\": \"ECR image URI for the Lambda function. Set by bootstrap workflow; updated by dr3dr3/dotai-mcp CI on each deploy.\"
+                  }
+                }
+              }"
+            echo "✅ Created lambda_image_uri variable in TFC workspace"
+          fi
+
+      # ---------------------------------------------------------------------------
+      # Summary
+      # ---------------------------------------------------------------------------
+      - name: Bootstrap Summary
+        run: |
+          echo "## Bootstrap Complete ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **ECR Repository** | \`${{ env.ECR_REPO }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Bootstrap Image** | \`${{ steps.ecr.outputs.uri }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Lambda Function** | \`${{ env.LAMBDA_FUNCTION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **TFC Workspace** | \`${{ env.TF_WORKSPACE }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Merge or push to \`main\` in **dr3dr3/dotai-mcp** to trigger the deploy" >> $GITHUB_STEP_SUMMARY
+          echo "   workflow, which will build and push the real application image and" >> $GITHUB_STEP_SUMMARY
+          echo "   update the Lambda function code." >> $GITHUB_STEP_SUMMARY
+          echo "2. \`lambda_image_uri\` has been set in the TFC workspace (\`${{ env.TF_WORKSPACE }}\`)" >> $GITHUB_STEP_SUMMARY
+          echo "   so future \`terraform plan\` runs will work without manual intervention." >> $GITHUB_STEP_SUMMARY
