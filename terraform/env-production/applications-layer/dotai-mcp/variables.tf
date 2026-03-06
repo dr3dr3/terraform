@@ -36,3 +36,9 @@ variable "lambda_image_uri" {
   type        = string
   default     = "placeholder/not-yet-bootstrapped:latest"
 }
+
+variable "lambda_image_uri" {
+  description = "Container image URI for the Lambda function. Defaults to a public AWS placeholder on first deploy; GitHub Actions owns all subsequent updates."
+  type        = string
+  default     = "public.ecr.aws/lambda/nodejs:22"
+}

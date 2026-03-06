@@ -7,8 +7,8 @@ resource "aws_lambda_function" "this" {
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
 
-  # Bootstrap: set lambda_image_uri in the Terraform Cloud workspace to the ECR
-  # image URI before the first apply. Push an initial image to ECR via CI first.
+  # Bootstrap: on first apply this defaults to a public AWS placeholder image so
+  # Terraform can create the Lambda before any real image exists in ECR.
   # GitHub Actions owns all subsequent image updates via `update-function-code`;
   # the lifecycle block below ensures Terraform never reverts that.
   image_uri = var.lambda_image_uri
