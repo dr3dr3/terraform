@@ -346,7 +346,7 @@ data "aws_iam_policy_document" "applications_permissions" {
     resources = ["*"]
   }
 
-  # IAM for Lambda execution roles
+  # IAM for Lambda execution roles and application deploy roles
   statement {
     sid    = "IAMForLambda"
     effect = "Allow"
@@ -368,6 +368,7 @@ data "aws_iam_policy_document" "applications_permissions" {
       "arn:aws:iam::*:role/lambda-*",
       "arn:aws:iam::*:role/*-lambda-*",
       "arn:aws:iam::*:role/*-lambda", # covers names ending in -lambda (e.g. dotai-lambda)
+      "arn:aws:iam::*:role/*-github-actions-deploy", # covers GHA OIDC deploy roles (e.g. dotai-github-actions-deploy)
     ]
   }
 
