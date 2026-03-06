@@ -9,3 +9,8 @@
 # Bearer token for MCP client authentication
 # Uses 1Password CLI injection — the secret reference will be replaced with the actual value
 mcp_auth_token = "op://terraform/dotai_mcp_auth_token/notes"
+
+# ECR image URI — set automatically in TFC by the bootstrap workflow (bootstrap-dotai-mcp.yml).
+# The default "placeholder/not-yet-bootstrapped:latest" allows plans to succeed before
+# bootstrapping; it is never applied due to lifecycle.ignore_changes on the Lambda resource.
+# lambda_image_uri = "123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/dotai:bootstrap"

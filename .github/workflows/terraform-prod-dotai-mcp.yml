@@ -1,0 +1,137 @@
+# =============================================================================
+# GitHub Actions Workflow: dotai-MCP - Production Applications
+# =============================================================================
+# ADR-014: API/GHA-driven, Manual apply for production applications layer.
+#
+# Triggers:
+#   - Push to main: Plan only (human reviews plan, apply via workflow_dispatch)
+#   - Pull request: Plan only with PR comment
+#   - Manual: Plan, Apply, or Destroy via workflow_dispatch
+#
+# Production Safety:
+#   - No auto-apply (production always requires explicit approval)
+#   - Requires "PRODUCTION" confirmation for apply and destroy
+#   - GitHub Environment approval gate via reusable-terraform.yml
+# =============================================================================
+
+name: "Terraform: Production dotai-MCP"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "terraform/env-production/applications-layer/dotai-mcp/**"
+      - ".github/workflows/terraform-prod-dotai-mcp.yml"
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "terraform/env-production/applications-layer/dotai-mcp/**"
+      - ".github/workflows/terraform-prod-dotai-mcp.yml"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform action to perform"
+        required: true
+        default: "plan"
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      confirm_production:
+        description: "Type 'PRODUCTION' to confirm production changes (required for apply/destroy)"
+        required: false
+        type: string
+
+# Ensure only one workflow runs at a time for this workspace
+concurrency:
+  group: terraform-prod-dotai-mcp
+  cancel-in-progress: false
+
+# Required for OIDC authentication and PR comments
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ===========================================================================
+  # Determine Action Based on Trigger
+  # ===========================================================================
+  determine-action:
+    name: "Determine Action"
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.set-action.outputs.action }}
+      should_run: ${{ steps.set-action.outputs.should_run }}
+    steps:
+      - name: Determine action based on trigger
+        id: set-action
+        run: |
+          ACTION="plan"
+          SHOULD_RUN="true"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ACTION="${{ github.event.inputs.action }}"
+
+            # Require confirmation for apply/destroy in production
+            if [[ "$ACTION" != "plan" ]]; then
+              if [[ "${{ github.event.inputs.confirm_production }}" != "PRODUCTION" ]]; then
+                echo "❌ Production confirmation required. Please type 'PRODUCTION' to confirm." >> $GITHUB_STEP_SUMMARY
+                SHOULD_RUN="false"
+              fi
+            fi
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            # Production only plans on push — never auto-applies
+            ACTION="plan"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ACTION="plan"
+          fi
+
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "Determined action: $ACTION"
+
+  # ===========================================================================
+  # Production Confirmation Gate
+  # ===========================================================================
+  confirm-production:
+    name: "Confirm Production"
+    runs-on: ubuntu-latest
+    needs: determine-action
+    if: needs.determine-action.outputs.should_run == 'false'
+    steps:
+      - name: Fail - Production confirmation required
+        run: |
+          echo "## ❌ Production Confirmation Required" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To perform **${{ needs.determine-action.outputs.action }}** in production:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Re-run this workflow manually" >> $GITHUB_STEP_SUMMARY
+          echo "2. Type \`PRODUCTION\` in the confirmation field" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This is a safety measure to prevent accidental production changes." >> $GITHUB_STEP_SUMMARY
+          exit 1
+
+  # ===========================================================================
+  # Call Reusable Terraform Workflow
+  # ===========================================================================
+  terraform:
+    name: "Terraform"
+    needs: determine-action
+    if: needs.determine-action.outputs.should_run == 'true'
+    uses: ./.github/workflows/reusable-terraform.yml
+    with:
+      environment: production
+      action: ${{ needs.determine-action.outputs.action }}
+      working_directory: terraform/env-production/applications-layer/dotai-mcp
+      tf_workspace: production-applications-dotai-mcp
+      require_approval: true  # Production always requires approval
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_PROD_APPLICATIONS }}
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
