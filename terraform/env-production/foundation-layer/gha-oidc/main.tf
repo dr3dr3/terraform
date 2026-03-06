@@ -33,12 +33,8 @@ provider "aws" {
 }
 
 data "aws_caller_identity" "current" {}
-data "aws_partition" "current" {}
 
 locals {
-  account_id = data.aws_caller_identity.current.account_id
-  partition  = data.aws_partition.current.partition
-
   # GitHub Actions OIDC provider details (per ADR-013)
   github_oidc_url      = "https://token.actions.githubusercontent.com"
   github_oidc_audience = "sts.amazonaws.com"
@@ -152,7 +148,7 @@ resource "aws_iam_role" "github_actions_prod_applications" {
     Name        = "github-actions-prod-applications"
     Environment = "Production"
     Layer       = "applications"
-    Purpose     = "Application-layer provisioning via GitHub Actions (ECR, Lambda, IAM, SSM)"
+    Purpose     = "Application-layer provisioning via GitHub Actions: ECR + Lambda + IAM + SSM"
   }
 }
 

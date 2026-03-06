@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-source /workspace/.env
-
 # Script to inject 1Password secrets into Terraform tfvars files
 # Uses 1Password CLI to replace secret references with actual values
 # 

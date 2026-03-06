@@ -316,9 +316,9 @@ data "aws_iam_policy_document" "github_actions_prod_platform_permissions" {
 data "aws_iam_policy_document" "github_actions_prod_applications_permissions" {
 
   statement {
-    sid    = "STSGetCallerIdentity"
-    effect = "Allow"
-    actions = ["sts:GetCallerIdentity"]
+    sid       = "STSGetCallerIdentity"
+    effect    = "Allow"
+    actions   = ["sts:GetCallerIdentity"]
     resources = ["*"]
   }
 
@@ -392,9 +392,9 @@ data "aws_iam_policy_document" "github_actions_prod_applications_permissions" {
   }
 
   statement {
-    sid     = "LambdaWaitForUpdate"
-    effect  = "Allow"
-    actions = ["lambda:GetFunctionConfiguration"]
+    sid       = "LambdaWaitForUpdate"
+    effect    = "Allow"
+    actions   = ["lambda:GetFunctionConfiguration"]
     resources = ["*"]
   }
 
