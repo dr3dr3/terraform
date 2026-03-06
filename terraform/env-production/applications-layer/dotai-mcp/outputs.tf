@@ -16,3 +16,8 @@ output "function_url" {
   description = "Lambda Function URL — configure this in Claude Desktop / Claude Code as the MCP server endpoint"
   value       = aws_lambda_function_url.this.function_url
 }
+
+output "github_actions_deploy_role_arn" {
+  description = "ARN of the GitHub Actions deploy role — set as AWS_DEPLOY_ROLE_ARN secret in dr3dr3/dotai-mcp"
+  value       = aws_iam_role.github_actions_deploy.arn
+}
