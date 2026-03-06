@@ -74,6 +74,7 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     actions = [
       "lambda:UpdateFunctionCode",
       "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
     ]
     resources = [aws_lambda_function.this.arn]
   }
