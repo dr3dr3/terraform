@@ -113,3 +113,51 @@ resource "aws_iam_role_policy" "github_actions_prod_platform_permissions" {
   role   = aws_iam_role.github_actions_prod_platform.id
   policy = data.aws_iam_policy_document.github_actions_prod_platform_permissions.json
 }
+
+# =============================================================================
+# GitHub Actions IAM Role for Production Applications Layer
+# Used by: bootstrap-dotai-mcp.yml, terraform-prod-dotai-mcp.yml
+# Permissions: ECR, Lambda, IAM (scoped to dotai), SSM, STS
+# =============================================================================
+resource "aws_iam_role" "github_actions_prod_applications" {
+  name        = "github-actions-prod-applications"
+  description = "GitHub Actions role for provisioning application-layer resources in production (ECR, Lambda, IAM, SSM)"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = aws_iam_openid_connect_provider.github_actions.arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = local.github_oidc_audience
+          }
+          StringLike = {
+            # Scoped to the terraform repo (bootstrap + caller workflows live here)
+            "token.actions.githubusercontent.com:sub" = "repo:${var.github_org}/${var.github_repo}:*"
+          }
+        }
+      }
+    ]
+  })
+
+  max_session_duration  = var.session_duration
+  force_detach_policies = true
+
+  tags = {
+    Name        = "github-actions-prod-applications"
+    Environment = "Production"
+    Layer       = "applications"
+    Purpose     = "Application-layer provisioning via GitHub Actions (ECR, Lambda, IAM, SSM)"
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_prod_applications_permissions" {
+  name   = "github-actions-prod-applications-policy"
+  role   = aws_iam_role.github_actions_prod_applications.id
+  policy = data.aws_iam_policy_document.github_actions_prod_applications_permissions.json
+}

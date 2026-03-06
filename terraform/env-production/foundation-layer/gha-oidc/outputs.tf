@@ -27,3 +27,13 @@ output "account_id" {
   description = "AWS account ID where the role is created (should be the production account)"
   value       = data.aws_caller_identity.current.account_id
 }
+
+output "github_actions_prod_applications_role_arn" {
+  description = "ARN of the GitHub Actions role for production applications layer — set as AWS_ROLE_ARN_PROD_APPLICATIONS secret in the terraform repo"
+  value       = aws_iam_role.github_actions_prod_applications.arn
+}
+
+output "github_actions_prod_applications_role_name" {
+  description = "Name of the GitHub Actions role for production applications layer"
+  value       = aws_iam_role.github_actions_prod_applications.name
+}

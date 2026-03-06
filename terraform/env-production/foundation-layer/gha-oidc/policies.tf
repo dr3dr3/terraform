@@ -307,3 +307,163 @@ data "aws_iam_policy_document" "github_actions_prod_platform_permissions" {
     resources = ["*"]
   }
 }
+
+# =============================================================================
+# Policy Document: GitHub Actions Production Applications Layer
+# Used by: github-actions-prod-applications role
+# Grants: ECR, Lambda, IAM (scoped), SSM, STS — sufficient for dotai-mcp bootstrap
+# =============================================================================
+data "aws_iam_policy_document" "github_actions_prod_applications_permissions" {
+
+  statement {
+    sid    = "STSGetCallerIdentity"
+    effect = "Allow"
+    actions = ["sts:GetCallerIdentity"]
+    resources = ["*"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # ECR — create repository, push bootstrap image, manage lifecycle policy
+  # ---------------------------------------------------------------------------
+  statement {
+    sid    = "ECRRepositoryManagement"
+    effect = "Allow"
+    actions = [
+      "ecr:CreateRepository",
+      "ecr:DeleteRepository",
+      "ecr:DescribeRepositories",
+      "ecr:GetRepositoryPolicy",
+      "ecr:SetRepositoryPolicy",
+      "ecr:DeleteRepositoryPolicy",
+      "ecr:TagResource",
+      "ecr:UntagResource",
+      "ecr:ListTagsForResource",
+      "ecr:PutLifecyclePolicy",
+      "ecr:GetLifecyclePolicy",
+      "ecr:DeleteLifecyclePolicy",
+      "ecr:PutImageScanningConfiguration",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ECRImagePush"
+    effect = "Allow"
+    actions = [
+      "ecr:GetAuthorizationToken",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload",
+      "ecr:BatchGetImage",
+      "ecr:DescribeImages",
+    ]
+    resources = ["*"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # Lambda — create function, update code, manage function URL
+  # ---------------------------------------------------------------------------
+  statement {
+    sid    = "LambdaManagement"
+    effect = "Allow"
+    actions = [
+      "lambda:CreateFunction",
+      "lambda:DeleteFunction",
+      "lambda:GetFunction",
+      "lambda:GetFunctionConfiguration",
+      "lambda:UpdateFunctionCode",
+      "lambda:UpdateFunctionConfiguration",
+      "lambda:AddPermission",
+      "lambda:RemovePermission",
+      "lambda:GetPolicy",
+      "lambda:TagResource",
+      "lambda:UntagResource",
+      "lambda:ListTags",
+      "lambda:CreateFunctionUrlConfig",
+      "lambda:UpdateFunctionUrlConfig",
+      "lambda:DeleteFunctionUrlConfig",
+      "lambda:GetFunctionUrlConfig",
+      "lambda:InvokeFunction",
+    ]
+    resources = ["arn:aws:lambda:*:*:function:dotai*"]
+  }
+
+  statement {
+    sid     = "LambdaWaitForUpdate"
+    effect  = "Allow"
+    actions = ["lambda:GetFunctionConfiguration"]
+    resources = ["*"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # IAM — create/manage the Lambda execution role (scoped to dotai prefix)
+  # ---------------------------------------------------------------------------
+  statement {
+    sid    = "IAMRoleManagement"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:UpdateRole",
+      "iam:PassRole",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+      "iam:PutRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListRoleTags",
+      "iam:UpdateAssumeRolePolicy",
+    ]
+    resources = [
+      "arn:aws:iam::*:role/dotai*",
+    ]
+  }
+
+  statement {
+    sid    = "IAMPolicyRead"
+    effect = "Allow"
+    actions = [
+      "iam:GetPolicy",
+      "iam:GetPolicyVersion",
+      "iam:ListAttachedRolePolicies",
+    ]
+    resources = ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"]
+  }
+
+  # ---------------------------------------------------------------------------
+  # SSM — store and manage the MCP auth token SecureString
+  # ---------------------------------------------------------------------------
+  statement {
+    sid    = "SSMParameterManagement"
+    effect = "Allow"
+    actions = [
+      "ssm:PutParameter",
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:DeleteParameter",
+      "ssm:DescribeParameters",
+      "ssm:AddTagsToResource",
+      "ssm:ListTagsForResource",
+    ]
+    resources = ["arn:aws:ssm:*:*:parameter/dotai*"]
+  }
+
+  statement {
+    sid    = "KMSForSSMSecureString"
+    effect = "Allow"
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt",
+      "kms:DescribeKey",
+    ]
+    resources = ["*"]
+  }
+}
