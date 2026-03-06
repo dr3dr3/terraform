@@ -32,6 +32,7 @@ variable "mcp_auth_token" {
 }
 
 variable "lambda_image_uri" {
-  description = "Container image URI for the Lambda function (must be a private ECR image in the same account). Push an initial image to ECR before the first apply, then set this variable in the Terraform Cloud workspace. GitHub Actions owns all subsequent image updates via update-function-code."
+  description = "Container image URI for the Lambda function (must be a private ECR image in the same account). Set automatically by the bootstrap workflow via the TFC API. The placeholder default allows speculative plans to succeed before bootstrapping; it is never applied because lifecycle.ignore_changes is set on the Lambda resource."
   type        = string
+  default     = "placeholder/not-yet-bootstrapped:latest"
 }
