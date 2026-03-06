@@ -106,6 +106,10 @@ jobs:
           terraform_version: ${{ inputs.terraform_version }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+      - name: Install 1Password CLI
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        uses: 1password/install-cli-action@v1
+
       - name: Inject .tfvars from 1Password (if token provided)
         if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
         env:
@@ -263,6 +267,10 @@ jobs:
           terraform_version: ${{ inputs.terraform_version }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+      - name: Install 1Password CLI
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        uses: 1password/install-cli-action@v1
+
       - name: Inject .tfvars from 1Password (if token provided)
         if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
         env:
@@ -324,6 +332,10 @@ jobs:
         with:
           terraform_version: ${{ inputs.terraform_version }}
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Install 1Password CLI
+        if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
+        uses: 1password/install-cli-action@v1
 
       - name: Inject .tfvars from 1Password (if token provided)
         if: env.OP_SERVICE_ACCOUNT_TOKEN != ''
